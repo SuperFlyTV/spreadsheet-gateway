@@ -1,0 +1,21 @@
+{
+  "name": "project-x",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "build": "tsc"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@types/uuid": "^3.4.4",
+    "googleapis": "^37.2.0",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^11.10.5",
+    "typescript": "^3.3.3333"
+  }
+}
