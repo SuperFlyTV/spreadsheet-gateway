@@ -1,4 +1,9 @@
 import { Section } from './Section'
+import { diff as diffFake } from 'deep-object-diff'
+import { diff } from 'deep-diff'
+
+// import { diff, addedDiff, deletedDiff, updatedDiff, detailedDiff } from 'deep-object-diff'
+
 export interface RunningOrder {
    id: string
    name: string // namnet på sheeten
@@ -36,5 +41,12 @@ export class SheetRunningOrder {
  
     addSections(sections: Section[]) {
         this.sections = this.sections.concat(sections)
+    }
+
+    diff(otherRunningOrder: SheetRunningOrder) {
+        let result = diffFake(this, otherRunningOrder)
+        let resultTwo = diff(this, otherRunningOrder)
+        console.log('result', result)
+        console.log('resultTwo', resultTwo)
     }
 }

@@ -162,7 +162,7 @@ export class Rundown {
         sections.push(section)
         return sections
     }
-    toRunningOrder() {
+    toRunningOrder(): SheetRunningOrder {
         let parsedData = this.parseRawData()
 
         let runningOrder = new SheetRunningOrder(this.sheetId, this.name, parsedData.meta.startTime, parsedData.meta.endTime)
@@ -176,5 +176,6 @@ export class Rundown {
         // parsedData.rows.forEach(row => {
 
         // })
+        return runningOrder
     }
 }

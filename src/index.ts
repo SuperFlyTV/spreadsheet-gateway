@@ -34,8 +34,11 @@ fs.readFile('credentials.json', (err, content) => {
                 const rundown = new Rundown(sheetObject.values.values || [], rundownTitle, sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
                 console.log('we have a rundown')
                 let parsedRundown = rundown.toRunningOrder()
+                let parsedRundownTwo = rundown.toRunningOrder()
                 console.log('omg. parsed rundown;', parsedRundown)
                 console.log(JSON.stringify(parsedRundown))
+                parsedRundownTwo.name = 'Something else'
+                parsedRundown.diff(parsedRundownTwo)
             })
             .catch(error => {
                 console.error('some kind of error', error)

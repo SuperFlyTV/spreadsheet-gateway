@@ -1,4 +1,5 @@
-import { google } from 'googleapis'
+import { google, sheets_v4 } from 'googleapis'
+import { OAuth2Client } from 'googleapis-common';
 const sheets = google.sheets('v4')
 // async function manageSheet(auth: any, spreadsheetId: string) {
 //     console.log('managing', spreadsheetId)
@@ -31,7 +32,7 @@ const sheets = google.sheets('v4')
 
 //     })
 // }
-export async function downloadSheet(auth: any, spreadsheetId: string) {
+export async function downloadSheet(auth: OAuth2Client, spreadsheetId: string) {
     console.log('managing', spreadsheetId)
 
     const request = {
@@ -61,4 +62,31 @@ export async function downloadSheet(auth: any, spreadsheetId: string) {
             }
         })
 
+}
+
+export interface SheetUpdate {
+    value: string
+    cellPosition: string
+}
+export function createSheetValueChange(cell: string, newValue: any): sheets_v4.Schema$ValueRange {
+    return {
+        range: `${cell}:${cell}`, // Maybe we don't need the `:`?
+        values: [[newValue]]
+    }
+}
+
+export async function updateSheet(auth: OAuth2Client, spreadsheetId: string, sheetUpdates: sheets_v4.Schema$ValueRange[]) {
+    let request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
+        spreadsheetId: spreadsheetId,
+        requestBody: {
+            valueInputOption: 'RAW',
+            data: sheetUpdates
+            // [{
+            //     range: 'A1:A1',
+            //     values: [[1]]
+            // }]
+        },
+        auth
+    }
+    sheets.spreadsheets.values.batchUpdate(request)
 }
