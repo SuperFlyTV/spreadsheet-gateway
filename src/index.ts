@@ -38,6 +38,7 @@ fs.readFile('credentials.json', (err, content) => {
                 console.log('omg. parsed rundown;', parsedRundown)
                 console.log(JSON.stringify(parsedRundown))
                 parsedRundownTwo.name = 'Something else'
+                parsedRundownTwo.sections.pop()
                 parsedRundown.diff(parsedRundownTwo)
             })
             .catch(error => {
@@ -78,7 +79,7 @@ function authorize(credentials: any, callback: Function) {
  * @param {Object} credentials The authorization client credentials.
  * @param {function} callback The callback to call with the authorized client.
  */
-function getAuthClient(credentials: any) {
+function getAuthClient(credentials: any): Promise<OAuth2Client> {
     return new Promise((resolve, reject) => {
         const { client_secret, client_id, redirect_uris } = credentials.installed;
         const oAuth2Client = new google.auth.OAuth2(

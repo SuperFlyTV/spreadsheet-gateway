@@ -1,8 +1,8 @@
 import { SheetRunningOrder } from './classes/RunningOrder'
 import { SheetSection } from './classes/Section'
 import { v1 as uuidV1 } from 'uuid'
-import { SheetItem } from './classes/Item';
-import { SheetStory } from './classes/Story';
+import { SheetItem } from './classes/Item'
+import { SheetStory } from './classes/Story'
 
 /**
  * Data attributes
