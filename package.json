@@ -2,22 +2,25 @@
   "name": "project-x",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "test": "jest",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@types/uuid": "^3.4.4",
     "deep-diff": "^1.0.2",
+    "deep-equal": "^1.0.1",
     "deep-object-diff": "^1.1.0",
     "googleapis": "^37.2.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
     "@types/deep-diff": "^1.0.0",
+    "@types/deep-equal": "^1.0.1",
     "@types/node": "^11.10.5",
     "typescript": "^3.3.3333"
   }

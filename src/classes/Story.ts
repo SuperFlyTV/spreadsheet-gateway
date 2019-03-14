@@ -1,4 +1,4 @@
-import { Item } from './Item'
+import { Item, SheetItem } from './Item'
 
 export interface Story {
    sectionId: string
@@ -14,6 +14,19 @@ export interface Story {
 }
 
 
+export interface SheetStoryDiff {
+   hasChanges: boolean
+   newValue?: SheetStory
+
+   type?: string
+   sectionId?: string
+   id?: string
+   rank?: number
+   name?: string
+   float?: boolean
+   script?: string
+   items?: Item[]
+}
 
 export class SheetStory implements Story {
    
@@ -25,14 +38,31 @@ export class SheetStory implements Story {
       public name: string,
       public float: boolean,
       public script: string,
-      public items: Item[]=[]){}
+      public items: SheetItem[]=[]){}
 
-   addItems(items: Item[]) { 
+   addItems(items: SheetItem[]) { 
       this.items = this.items.concat(items)
    }
-   addItem(item: Item) { 
+   addItem(item: SheetItem) { 
       this.items.push(item)
    }
+
+   diff(otherStory?: SheetStory): SheetStoryDiff {
+      let storyDiff: SheetStoryDiff = { hasChanges: false, newValue: otherStory }
+      if(!otherStory) {
+         storyDiff.hasChanges = true
+         return storyDiff
+      }
+
+      storyDiff.items = otherStory.items
+      if(this.items.length !== otherStory.items.length) {
+         storyDiff.hasChanges = true
+      } else {
+         this.items.forEach((existingItem, sectionIndex) => {
+            storyDiff.hasChanges = storyDiff.hasChanges || !existingItem.equal(otherStory.items[sectionIndex])
+         })
+      }
+
+      return storyDiff
+   }
 }
-
-

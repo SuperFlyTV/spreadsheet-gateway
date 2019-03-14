@@ -39,7 +39,8 @@ fs.readFile('credentials.json', (err, content) => {
                 console.log(JSON.stringify(parsedRundown))
                 parsedRundownTwo.name = 'Something else'
                 parsedRundownTwo.sections.pop()
-                parsedRundown.diff(parsedRundownTwo)
+                let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
+                // parsedRundown.diff(parsedRundownTwo)
             })
             .catch(error => {
                 console.error('some kind of error', error)

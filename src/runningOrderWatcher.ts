@@ -29,30 +29,31 @@ export class RunningOrderWatcher extends EventEmitter {
 
     private onInterval () {
         
-        this.getChanges()
-        .then((changesObject: any) => {
-            if (!changesObject) { return }
-            console.log('allChanges', typeof changesObject, changesObject)
-            pageToken = changesObject.newStartPageToken; // update page token
-            (changesObject.changes || []).forEach((change: any) => {
-                if (change && nsiep[change.fileId]) {
-                    // There was a change in one of our files.
-                    if (change.removed) {
-                        // file was removed
-                        // removeSheet(change.fileId)ø
-                        console.log('thing was deleted', change.fileId)
-                        delete nsiep[change.fileId]
-                    } else {
-                        // file was updated
-                        console.log('thing was updated', change.fileId)
-                        manageSheet(auth, change.fileId)
-                    }
-                }
-            })
-        })
-        .catch(error => {
-            console.error(error)
-        })
+        // this.getChanges()
+        // .then((changesObject: any) => {
+        //     if (!changesObject) { return }
+        //     console.log('allChanges', typeof changesObject, changesObject)
+        //     pageToken = changesObject.newStartPageToken; // update page token
+        //     (changesObject.changes || []).forEach((change: any) => {
+        //         if (change && nsiep[change.fileId]) {
+        //             // There was a change in one of our files.
+        //             if (change.removed) {
+        //                 // file was removed
+        //                 // removeSheet(change.fileId)ø
+        //                 console.log('thing was deleted', change.fileId)
+        //                 delete nsiep[change.fileId]
+        //             } else {
+        //                 // file was updated
+        //                 console.log('thing was updated', change.fileId)
+        //                 manageSheet(auth, change.fileId)
+        //             }
+        //         }
+        //     })
+        // })
+        // .catch(error => {
+        //     console.error(error)
+        // })
+        
 
         this.runningOrders.forEach(runningOrder => {
 
