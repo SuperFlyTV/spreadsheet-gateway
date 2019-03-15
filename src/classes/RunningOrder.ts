@@ -1,4 +1,4 @@
-import { v1 as uuidV1 } from 'uuid'
+import { v4 as uuidV4 } from 'uuid'
 import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
 import { hasChangeType } from './hasChangeType'
 import { SheetStory, SheetStoryDiffFlat } from './Story'
@@ -271,17 +271,18 @@ export class SheetRunningOrder implements RunningOrder {
         let sheetUpdates: SheetUpdate[] = []
 
         parsedRows.forEach(row => {
-            let id = row.data.id 
+            let id = row.data.id
+            let currentSheetUpdate: SheetUpdate | undefined
             if(!id) {
-                id = uuidV1()
+                id = uuidV4()
                 // Update sheet with new ids
                 let rowPosition = row.meta.rowPosition
                 let colPosition = this.columnToLetter(row.meta.propColPosition['id'] + 1)
                 
-                sheetUpdates.push({
+                currentSheetUpdate = {
                     value: id,
                     cellPosition: colPosition + rowPosition
-                })
+                }
             }
             switch (row.data.type) {
                 case 'SECTION':
@@ -301,9 +302,12 @@ export class SheetRunningOrder implements RunningOrder {
                     // This is an item only, not a story even. Usually "graphics" or "video"
                     if(!story) {
                         // Then what?!
+                        currentSheetUpdate = undefined
                     } else {
                         if(row.data.objectType){
                             story.addItem(new SheetItem(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
+                        } else {
+                            currentSheetUpdate = undefined
                         }
                     }
                     break;
@@ -326,6 +330,9 @@ export class SheetRunningOrder implements RunningOrder {
                     // TODO: ID issue. We can probably do "id + `_item`, or some shit"
                     // TODO: figure out how to deal with object-time
                     break;
+            }
+            if(currentSheetUpdate) {
+                sheetUpdates.push(currentSheetUpdate)
             }
         })
         
