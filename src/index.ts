@@ -1,4 +1,4 @@
-import { downloadSheet } from "./sheets";
+import { SheetsManager } from './classes/SheetManager'
 
 import * as fs from 'fs'
 import * as readline from 'readline'
@@ -7,6 +7,7 @@ import { OAuth2Client } from 'google-auth-library'
 import { SheetRunningOrder } from "./classes/RunningOrder";
 
 import * as cellData from './classes/__tests__/cellValues.json'
+import { RunningOrderWatcher } from './classes/RunningOrderWatcher';
 
 // If modifying these scopes, delete token.json.
 // const SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
@@ -20,42 +21,40 @@ const TOKEN_PATH = 'token.json';
 // Load client secrets from a local file.
 fs.readFile('credentials.json', (err, content) => {
     if (err) return console.log('Error loading client secret file:', err);
-    // Authorize a client with credentials, then call the Google Drive API.
-    // authorize(JSON.parse(content), listFiles);
     getAuthClient(JSON.parse(content.toString())).then(authClient => {
-        // manageSheet(authClient, '1MfdyCwGZ9iQhBCkH9zFM5oA1VLTzd-HYs_0pCxDoR2E')
-        // changesInFile(authClient)
 
-        // listMyFiles(authClient)
-        // startPollFiles(authClient)
 
-        // downloadSheet(authClient, '10djqQhTFGv5I6YMK8SjQrHfIDTusOzJn24_jmNsyh2M')
-        downloadSheet(authClient, '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
-            .then(sheetObject => {
-                const runningOrderTitle = sheetObject.meta.properties ? sheetObject.meta.properties.title || 'unknown' : 'unknown'
-                let parsedRundown = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
-                let parsedRundownTwo = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
-                console.log('omg. parsed rundown;', parsedRundown)
-                console.log(JSON.stringify(parsedRundown))
-                parsedRundownTwo.name = 'Something else'
-                parsedRundownTwo.sections.pop()
-                parsedRundownTwo.sections[0].stories[0].name ='this other name here'
-                //let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
-                let theDiff = parsedRundown.diff(parsedRundownTwo)
-                console.log('diff3', theDiff)
-                let flatDiffs = SheetRunningOrder.DiffWithTypeToFlatDiff(theDiff)
-                console.log('flatDiffs', flatDiffs)
-            })
-            .catch(error => {
-                console.error('some kind of error', error)
-                console.error(error.stack)
-            })
-        addDriveFolder(authClient, 'testfolder')
-            .then(folder => {
-                console.log('Got this folder', folder)
-            })
-        // downloadFileTwo(authClient, '1MfdyCwGZ9iQhBCkH9zFM5oA1VLTzd-HYs_0pCxDoR2E', 'something.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        // downloadFileTwo(authClient, '1MfdyCwGZ9iQhBCkH9zFM5oA1VLTzd-HYs_0pCxDoR2E', 'something.pdf', 'application/pdf')
+        let watcher = new RunningOrderWatcher([], 10000, authClient)
+        watcher.addSheetsFolderToWatch('testfolder')
+        .then(result => {
+            console.log('added folder to watch', result)
+        })
+
+        // let sheetManager = new SheetsManager(authClient)
+        // sheetManager.downloadSheet('1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
+        //     .then(sheetObject => {
+        //         const runningOrderTitle = sheetObject.meta.properties ? sheetObject.meta.properties.title || 'unknown' : 'unknown'
+        //         let parsedRunningOrder = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
+        //         let parsedRundownTwo = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
+        //         console.log('omg. parsed parsedRunningOrder;', parsedRunningOrder)
+        //         console.log(JSON.stringify(parsedRunningOrder))
+        //         parsedRundownTwo.name = 'Something else'
+        //         parsedRundownTwo.sections.pop()
+        //         parsedRundownTwo.sections[0].stories[0].name ='this other name here'
+        //         //let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
+        //         let theDiff = parsedRunningOrder.diff(parsedRundownTwo)
+        //         console.log('diff3', theDiff)
+        //         let flatDiffs = SheetRunningOrder.DiffWithTypeToFlatDiff(theDiff)
+        //         console.log('flatDiffs', flatDiffs)
+        //     })
+        //     .catch(error => {
+        //         console.error('some kind of error', error)
+        //         console.error(error.stack)
+        //     })
+        // addDriveFolder(authClient, 'testfolder')
+        //     .then(folder => {
+        //         console.log('Got this folder', folder)
+        //     })
     })
 });
 

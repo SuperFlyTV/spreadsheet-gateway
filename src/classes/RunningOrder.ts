@@ -1,7 +1,7 @@
 import { v1 as uuidV1 } from 'uuid'
 
 import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
-import { RunningOrderWatcher } from '../runningOrderWatcher'
+import { RunningOrderWatcher } from './RunningOrderWatcher'
 import { hasChangeType } from './hasChangeType'
 import { SheetStory, SheetStoryDiffFlat } from './Story'
 import { SheetItem } from './Item'
@@ -115,7 +115,7 @@ export interface RunningOrderWithSections extends RunningOrder {
 export interface SheetRunningOrderDiffFlat extends hasChangeType {
     newValue?: RunningOrder // The full new value of the element
 
-    id?: string // If defined, has the new, edited, value of the parameter
+    id: string // If defined, has the new, edited, value of the parameter
     name?: string
     expectedStart?: Date
     expectedEnd?: Date

@@ -7,7 +7,7 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
+            "name": "Debug Program",
             "program": "${workspaceFolder}/src/index.ts",
             "preLaunchTask": "build",
             "outFiles": [
