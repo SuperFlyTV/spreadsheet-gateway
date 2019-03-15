@@ -3,7 +3,7 @@ import { v1 as uuidV1 } from 'uuid'
 import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
 import { RunningOrderWatcher } from '../runningOrderWatcher'
 import { hasChangeType } from './hasChangeType'
-import { SheetStory } from './Story'
+import { SheetStory, SheetStoryDiffFlat } from './Story'
 import { SheetItem } from './Item'
 // import { diff, addedDiff, deletedDiff, updatedDiff, detailedDiff } from 'deep-object-diff'
 
@@ -112,13 +112,15 @@ export interface RunningOrderWithSections extends RunningOrder {
     sections: Section[]
 }
 
-export interface SheetRunningOrderDiffWithType extends hasChangeType {
+export interface SheetRunningOrderDiffFlat extends hasChangeType {
     newValue?: RunningOrder // The full new value of the element
 
     id?: string // If defined, has the new, edited, value of the parameter
     name?: string
     expectedStart?: Date
     expectedEnd?: Date
+}
+export interface SheetRunningOrderDiffWithType extends SheetRunningOrderDiffFlat, hasChangeType {
     sections: SheetSectionDiffWithType[] // Contains a list of section-diffs. If empty, no changes.
 }
 
@@ -138,10 +140,10 @@ export class SheetRunningOrder implements RunningOrder {
     addSections(sections: SheetSection[]) {
         this.sections = this.sections.concat(sections)
     }
-    diffWithTypeToFlatDiff(diffs: SheetRunningOrderDiffWithType) {
-        let flatDiffRunningOrders: any[] = []
-        let flatDiffSections: any[] = []
-        let flatDiffStories: any[] = []
+    static DiffWithTypeToFlatDiff(diffs: SheetRunningOrderDiffWithType) {
+        let flatDiffRunningOrders: SheetRunningOrderDiffFlat[] = []
+        let flatDiffSections: SheetSectionDiffWithType[] = []
+        let flatDiffStories: SheetStoryDiffFlat[] = []
 
         if(diffs) {
             if(diffs.changeType !== 'Unchanged') {
@@ -203,10 +205,16 @@ export class SheetRunningOrder implements RunningOrder {
             switch (key) {
                 case 'id':
                 case 'name':
-                case 'expectedStart':
-                case 'expectedEnd':
                     const isDifferent = this[key] !== otherRunningOrder[key]
                     if(isDifferent) {
+                        runningOrderDiff[key] = otherRunningOrder[key]
+                        runningOrderDiff.changeType = 'Edited'
+                    }
+                    break
+                case 'expectedStart':
+                case 'expectedEnd':
+                    const isDifferentTime = this[key].getTime() !== otherRunningOrder[key].getTime()
+                    if(isDifferentTime) {
                         runningOrderDiff[key] = otherRunningOrder[key]
                         runningOrderDiff.changeType = 'Edited'
                     }
@@ -370,6 +378,20 @@ export class SheetRunningOrder implements RunningOrder {
         sections.push(section)
         return sections
     }
+    /**
+     * Data attributes
+     * 
+     * Row 1: Meta data about the running order;
+     *  A2: Expected start
+     *  A4: Expected end
+     * Row 2: table names
+     *  Should have one of each of id, name, type, float, script, objectType, objectTime, , duration, clipName, feedback
+     *  Can have 0 to N of "attr: X" Where x can be any alphanumerical value eg. "attr: name"
+     * Row 3: Human readable information. Ignored
+     * Row 4: Start of row-items. Normally Row 4 will be a SECTION. If not a SECTION, a "section 1" is assumed.
+     * All following rows is one of the possible row types. 
+     */
+
     static fromSheetCells(sheetId: string, name: string, cells: any[][]): SheetRunningOrder {
         let parsedData = SheetRunningOrder.parseRawData(cells)
         let runningOrder = new SheetRunningOrder(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)

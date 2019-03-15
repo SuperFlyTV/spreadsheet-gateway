@@ -13,7 +13,7 @@ export interface SectionWithStories extends Section{
     stories: Story[]
 }
 
-export interface SheetSectionDiffWithType extends hasChangeType {
+export interface SheetSectionDiffFlat extends hasChangeType {
     /**
      * hasChanges indicates if there was a difference in the object or not
      */
@@ -24,6 +24,8 @@ export interface SheetSectionDiffWithType extends hasChangeType {
     rank?: number
     name?: string
     float?: boolean
+}
+export interface SheetSectionDiffWithType extends SheetSectionDiffFlat, hasChangeType {
     stories: SheetStoryDiffWithType[]
 }
 export class SheetSection implements Section {

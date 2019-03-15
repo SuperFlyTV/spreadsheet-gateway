@@ -4,7 +4,6 @@ import * as fs from 'fs'
 import * as readline from 'readline'
 import { google } from 'googleapis'
 import { OAuth2Client } from 'google-auth-library'
-import { RunningOrderParser } from './rundown'
 import { SheetRunningOrder } from "./classes/RunningOrder";
 
 import * as cellData from './classes/__tests__/cellValues.json'
@@ -33,25 +32,19 @@ fs.readFile('credentials.json', (err, content) => {
         // downloadSheet(authClient, '10djqQhTFGv5I6YMK8SjQrHfIDTusOzJn24_jmNsyh2M')
         downloadSheet(authClient, '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
             .then(sheetObject => {
-                console.log('values', sheetObject.values)
-                const rundownTitle = sheetObject.meta.properties ? sheetObject.meta.properties.title || 'unknown' : 'unknown'
-                const rundown = new RunningOrderParser((cellData as any).values || [], rundownTitle, sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
-                const runningOrder = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', rundownTitle, sheetObject.values.values || [])
-                console.log('we have a rundown')
-                let parsedRundown = rundown.toRunningOrder()
-                let parsedRundownTwo = runningOrder
+                const runningOrderTitle = sheetObject.meta.properties ? sheetObject.meta.properties.title || 'unknown' : 'unknown'
+                let parsedRundown = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
+                let parsedRundownTwo = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', runningOrderTitle, sheetObject.values.values || [])
                 console.log('omg. parsed rundown;', parsedRundown)
                 console.log(JSON.stringify(parsedRundown))
                 parsedRundownTwo.name = 'Something else'
                 parsedRundownTwo.sections.pop()
                 parsedRundownTwo.sections[0].stories[0].name ='this other name here'
                 //let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
-                let theDiff = parsedRundown.diffThree(parsedRundownTwo)
+                let theDiff = parsedRundown.diff(parsedRundownTwo)
                 console.log('diff3', theDiff)
-                let flatDiffs = parsedRundown.diffWithTypeToFlatDiff(theDiff)
+                let flatDiffs = SheetRunningOrder.DiffWithTypeToFlatDiff(theDiff)
                 console.log('flatDiffs', flatDiffs)
-
-                // parsedRundown.diff(parsedRundownTwo)
             })
             .catch(error => {
                 console.error('some kind of error', error)

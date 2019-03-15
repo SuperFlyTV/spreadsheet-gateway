@@ -15,7 +15,7 @@ export interface Story {
 }
 
 
-export interface SheetStoryDiffWithType extends hasChangeType {
+export interface SheetStoryDiffFlat extends hasChangeType {
    newValue?: SheetStory
 
    type?: string
@@ -25,6 +25,8 @@ export interface SheetStoryDiffWithType extends hasChangeType {
    name?: string
    float?: boolean
    script?: string
+}
+export interface SheetStoryDiffWithType extends SheetStoryDiffFlat, hasChangeType {
    items?: Item[]
 }
 
