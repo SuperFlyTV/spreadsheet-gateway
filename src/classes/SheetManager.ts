@@ -36,7 +36,7 @@ export class SheetsManager {
         return this.downloadSheet(rundownSheetId)
         .then(data => {
             const runningOrderTitle = data.meta.properties ? data.meta.properties.title || 'unknown' : 'unknown'
-            return SheetRunningOrder.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [])
+            return SheetRunningOrder.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], this)
         })
     }
 
@@ -70,6 +70,18 @@ export class SheetsManager {
     
     }
     
+
+    updateSheetWithSheetUpdates(spreadsheetId: string, sheetUpdates: SheetUpdate[]) {
+        let googleUpdates = sheetUpdates.map(update => {
+            return SheetsManager.createSheetValueChange(update.cellPosition, update.value)
+        })
+        return this.updateSheet(spreadsheetId, googleUpdates)
+        .then((res) => {
+            console.log('Sheet updated', spreadsheetId)
+            return res
+        })
+    }
+
     /**
      * Update the values of the google spreadsheet in google drive (external).
      * 

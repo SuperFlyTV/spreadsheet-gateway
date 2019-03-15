@@ -3,6 +3,7 @@ import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
 import { hasChangeType } from './hasChangeType'
 import { SheetStory, SheetStoryDiffFlat } from './Story'
 import { SheetItem } from './Item'
+import { SheetUpdate, SheetsManager } from './SheetManager'
 
 
 interface RundownMetaData {
@@ -11,17 +12,25 @@ interface RundownMetaData {
 }
 
 interface ParsedRow {
-    id?: string
-    name?: string
-    type?: string
-    float: string
-    script?: string
-    objectType?: string
-    objectTime?: string
-    duration?: string
-    clipName?: string
-    feedback?: string
-    attributes?: {[key: string]: string}
+    meta: {
+        rowPosition: number,
+        propColPosition: {
+            [attrName: string]: number
+        }
+    },
+    data: {
+        id?: string
+        name?: string
+        type?: string
+        float: string
+        script?: string
+        objectType?: string
+        objectTime?: string
+        duration?: string
+        clipName?: string
+        feedback?: string
+        attributes?: {[key: string]: string}
+    }
 }
 
 export interface RunningOrder {
@@ -187,22 +196,20 @@ export class SheetRunningOrder implements RunningOrder {
         let tablesRow = cells[1] || []
         let tablePositions: any = {}
         let inverseTablePositions: {[key: number]: string} = {}
-        tablesRow.forEach((cell, index) => {
+        tablesRow.forEach((cell, columnNumber) => {
             if(typeof cell === 'string' && cell !== '') {
-                tablePositions[cell] = index
-                inverseTablePositions[index] = cell
+                tablePositions[cell] = columnNumber
+                inverseTablePositions[columnNumber] = cell
             }
         })
-        let tablePositionTuples = Object.keys(tablePositions).map(key => {
-            return {name: key, pos: tablePositions[key]}
-        })
         let parsedRows: ParsedRow[] = []
-        for(let i = 3; i < cells.length; i++) {
-            let row = cells[i]
+        for(let rowNumber = 3; rowNumber < cells.length; rowNumber++) {
+            let row = cells[rowNumber]
             if(row) {
-                let rowItem: ParsedRow = {float: 'FALSE'}
-                row.forEach((cell, index) => {
-                    const attr = inverseTablePositions[index]
+                let rowItem: ParsedRow = {meta: { rowPosition: rowNumber, propColPosition: {} }, data: {float: 'FALSE'}}
+                row.forEach((cell, columnNumber) => {
+                    const attr = inverseTablePositions[columnNumber]
+                    rowItem.meta.propColPosition[attr] = columnNumber
                     if(cell === undefined || cell === ''){ return }
                     switch(attr){
                         case 'id':
@@ -215,17 +222,17 @@ export class SheetRunningOrder implements RunningOrder {
                         case 'duration':
                         case 'clipName':
                         case 'feedback':
-                            rowItem[attr] = cell
+                            rowItem.data[attr] = cell
                             break;
                         case '':
                         case undefined:
                             break;
                         default:
                             if(attr.startsWith('attr: ')) {
-                                if(!rowItem.attributes) {
-                                    rowItem.attributes = {}
+                                if(!rowItem.data.attributes) {
+                                    rowItem.data.attributes = {}
                                 }
-                                rowItem.attributes[attr.slice(6)] = cell
+                                rowItem.data.attributes[attr.slice(6)] = cell
                             }
                             break
                     }
@@ -243,14 +250,40 @@ export class SheetRunningOrder implements RunningOrder {
             }
         }
     }
-    private static parsedRowsIntoSections(sheetId: string, parsedRows: ParsedRow[]): SheetSection[] {
+
+    static columnToLetter(columnOneIndexed: number): string {
+        let temp: number | undefined
+        let letter = ''
+        while (columnOneIndexed > 0)
+        {
+            temp = (columnOneIndexed - 1) % 26
+            letter = String.fromCharCode(temp + 65) + letter
+            columnOneIndexed = (columnOneIndexed - temp - 1) / 26
+        }
+        return letter
+    }
+
+    private static parsedRowsIntoSections(sheetId: string, parsedRows: ParsedRow[]): {sections: SheetSection[], sheetUpdates: SheetUpdate[]} {
         let sections: SheetSection[] = []
         const implicitId = 'implicitFirst'
         let section = new SheetSection(sheetId,implicitId, 0,'Implicit First Section', false)
         let story: SheetStory | undefined
-        // let items: SheetItem[] = []
+        let sheetUpdates: SheetUpdate[] = []
+
         parsedRows.forEach(row => {
-            switch (row.type) {
+            let id = row.data.id 
+            if(!id) {
+                id = uuidV1()
+                // Update sheet with new ids
+                let rowPosition = row.meta.rowPosition
+                let colPosition = this.columnToLetter(row.meta.propColPosition['id'] + 1)
+                
+                sheetUpdates.push({
+                    value: id,
+                    cellPosition: colPosition + rowPosition
+                })
+            }
+            switch (row.data.type) {
                 case 'SECTION':
                     if(story) {
                         section.addStory(story)
@@ -261,7 +294,7 @@ export class SheetRunningOrder implements RunningOrder {
                     }
 
                     // TODO: if there is no ID we need to update the sheet.
-                    section = new SheetSection(sheetId, row.id || uuidV1(), sections.length, row.name || '', row.float === 'TRUE')
+                    section = new SheetSection(sheetId, id, sections.length, row.data.name || '', row.data.float === 'TRUE')
                     break;
                 case '':
                 case undefined:
@@ -269,8 +302,8 @@ export class SheetRunningOrder implements RunningOrder {
                     if(!story) {
                         // Then what?!
                     } else {
-                        if(row.objectType){
-                            story.addItem(new SheetItem(row.id || uuidV1(), row.objectType, Number(row.objectTime) || 0, Number(row.duration) || 0, row.clipName || '', row.attributes || {}, 'TBA'))
+                        if(row.data.objectType){
+                            story.addItem(new SheetItem(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
                         }
                     }
                     break;
@@ -285,10 +318,9 @@ export class SheetRunningOrder implements RunningOrder {
                         section.addStory(story)
                         story = undefined
                     }
-                    const id = row.id || uuidV1()
-                    story = new SheetStory(row.type, section.id, id, section.stories.length, row.name || '', row.float === 'TRUE', row.script || '')
-                    if(row.objectType){
-                        const firstItem = new SheetItem(id + '_item', row.objectType, Number(row.objectTime) || 0, Number(row.duration) || 0, row.clipName || '', row.attributes || {}, 'TBA')
+                    story = new SheetStory(row.data.type, section.id, id, section.stories.length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+                    if(row.data.objectType){
+                        const firstItem = new SheetItem(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
                         story.addItem(firstItem)
                     }
                     // TODO: ID issue. We can probably do "id + `_item`, or some shit"
@@ -300,9 +332,8 @@ export class SheetRunningOrder implements RunningOrder {
         if(story) {
             section.addStory(story)
         }
-    
         sections.push(section)
-        return sections
+        return { sections, sheetUpdates }
     }
     /**
      * Data attributes
@@ -318,11 +349,22 @@ export class SheetRunningOrder implements RunningOrder {
      * All following rows is one of the possible row types. 
      */
 
-    static fromSheetCells(sheetId: string, name: string, cells: any[][]): SheetRunningOrder {
+     /**
+      * 
+      * @param sheetId Id of the sheet
+      * @param name Name of the sheet (often the title)
+      * @param cells Cells of the sheet
+      * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
+      */
+    static fromSheetCells(sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRunningOrder {
         let parsedData = SheetRunningOrder.parseRawData(cells)
         let runningOrder = new SheetRunningOrder(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)
-        let sections = SheetRunningOrder.parsedRowsIntoSections(sheetId, parsedData.rows)
-        runningOrder.addSections(sections)
+        let results = SheetRunningOrder.parsedRowsIntoSections(sheetId, parsedData.rows)
+        runningOrder.addSections(results.sections)
+
+        if(sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0){
+            sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates)
+        }
         return runningOrder
     }
 }
