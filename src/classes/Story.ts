@@ -1,4 +1,5 @@
 import { Item, SheetItem } from './Item'
+import { hasChangeType } from './hasChangeType';
 
 export interface Story {
    sectionId: string
@@ -14,6 +15,18 @@ export interface Story {
 }
 
 
+export interface SheetStoryDiffWithType extends hasChangeType {
+   newValue?: SheetStory
+
+   type?: string
+   sectionId?: string
+   id?: string
+   rank?: number
+   name?: string
+   float?: boolean
+   script?: string
+   items?: Item[]
+}
 export interface SheetStoryDiff {
    hasChanges: boolean
    newValue?: SheetStory
@@ -29,7 +42,7 @@ export interface SheetStoryDiff {
 }
 
 export class SheetStory implements Story {
-   
+
    constructor(
       public type: string,
       public sectionId: string,
@@ -38,24 +51,93 @@ export class SheetStory implements Story {
       public name: string,
       public float: boolean,
       public script: string,
-      public items: SheetItem[]=[]){}
+      public items: SheetItem[] = []) { }
 
-   addItems(items: SheetItem[]) { 
+   addItems(items: SheetItem[]) {
       this.items = this.items.concat(items)
    }
-   addItem(item: SheetItem) { 
+   addItem(item: SheetItem) {
       this.items.push(item)
+   }
+
+   diffTwo(otherStory?: SheetStory): SheetStoryDiffWithType {
+      let storyDiff: SheetStoryDiffWithType = { id: this.id, changeType: 'Unchanged', newValue: otherStory }
+      if (!otherStory) {
+         storyDiff.changeType = 'Deleted'
+         return storyDiff
+      }
+
+      for (const key in otherStory) {
+         switch (key) {
+            case 'type':
+            case 'sectionId':
+            case 'id':
+            case 'rank':
+            case 'name':
+            case 'float':
+            case 'script':
+               const isDifferent = this[key] !== otherStory[key]
+               if (isDifferent) {
+                  storyDiff[key] = otherStory[key]
+                  storyDiff.changeType = 'Edited'
+               }
+               break
+            case 'items':
+               // Will tackle this separately
+               break;
+            default:
+               break;
+         }
+      }
+
+
+      storyDiff.items = otherStory.items
+      if (this.items.length !== otherStory.items.length) {
+         storyDiff.changeType = 'Edited'
+      } else {
+         let hasChanges = false
+         this.items.forEach((existingItem, sectionIndex) => {
+            hasChanges = hasChanges || !existingItem.equal(otherStory.items[sectionIndex])
+         })
+         if (hasChanges) {
+            storyDiff.changeType = 'Edited'
+         }
+      }
+
+      return storyDiff
    }
 
    diff(otherStory?: SheetStory): SheetStoryDiff {
       let storyDiff: SheetStoryDiff = { hasChanges: false, newValue: otherStory }
-      if(!otherStory) {
+      if (!otherStory) {
          storyDiff.hasChanges = true
          return storyDiff
       }
+      for (const key in otherStory) {
+         switch (key) {
+            case 'type':
+            case 'sectionId':
+            case 'id':
+            case 'rank':
+            case 'name':
+            case 'float':
+            case 'script':
+               const isDifferent = this[key] !== (otherStory as any)[key]
+               storyDiff[key] = isDifferent ? (otherStory as any)[key] : undefined
+               if (isDifferent) {
+                  storyDiff.hasChanges = true
+               }
+               break
+            case 'items':
+               // Will tackle this separately
+               break;
+            default:
+               break;
+         }
+      }
 
       storyDiff.items = otherStory.items
-      if(this.items.length !== otherStory.items.length) {
+      if (this.items.length !== otherStory.items.length) {
          storyDiff.hasChanges = true
       } else {
          this.items.forEach((existingItem, sectionIndex) => {
@@ -64,5 +146,15 @@ export class SheetStory implements Story {
       }
 
       return storyDiff
+   }
+
+   static newStoryDiff(story: SheetStory): SheetStoryDiffWithType {
+      let diff: SheetStoryDiffWithType = {
+         changeType: 'New',
+         id: story.id,
+         newValue: story,
+         items: story.items
+      }
+      return diff
    }
 }

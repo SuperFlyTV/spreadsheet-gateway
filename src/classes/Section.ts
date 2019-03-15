@@ -1,4 +1,5 @@
-import { Story, SheetStory, SheetStoryDiff } from './Story'
+import { Story, SheetStory, SheetStoryDiff, SheetStoryDiffWithType } from './Story'
+import { hasChangeType } from './hasChangeType';
 export interface Section {
    runningOrderId: string
    id: string // unique within the parent runningOrder
@@ -26,6 +27,19 @@ export interface SheetSectionDiff {
     float?: boolean
     stories?: SheetStoryDiff[]
 }
+export interface SheetSectionDiffWithType extends hasChangeType {
+    /**
+     * hasChanges indicates if there was a difference in the object or not
+     */
+    newValue?: Section
+
+    runningOrderId?: string
+    id?: string
+    rank?: number
+    name?: string
+    float?: boolean
+    stories: SheetStoryDiffWithType[]
+}
 export class SheetSection implements Section {
     // runningOrderId: string
     // id: string // unique within the parent runningOrder
@@ -49,6 +63,61 @@ export class SheetSection implements Section {
         this.stories = this.stories.concat(stories)
     }
 
+    diffTwo(otherSection?: SheetSection): SheetSectionDiffWithType {
+        let sectionDiff: SheetSectionDiffWithType = { changeType: 'Unchanged', newValue: otherSection, stories: [] }
+        if(!otherSection) {
+            sectionDiff.changeType = 'Deleted'
+            return sectionDiff
+        }
+        for (const key in otherSection) {
+            switch (key) {
+                case 'runningOrderId':
+                case 'id':
+                case 'rank':
+                case 'name':
+                case 'float':
+                    const isDifferent = this[key] !== otherSection[key]
+                    if(isDifferent) {
+                        sectionDiff[key] = otherSection[key]
+                        sectionDiff.changeType = 'Edited'
+                    }
+                    break
+                case 'stories':
+                    // Will tackle this separately
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        let storyCache: {[storyId: string]: SheetStory } = {}
+        
+        this.stories.forEach(story => {
+            storyCache[story.id] = story
+        })
+        otherSection.stories.forEach(story => {
+            let existingStory = storyCache[story.id]
+            if(!existingStory) {
+                sectionDiff.stories.push(SheetStory.newStoryDiff(story)) // new section
+            } else {
+                let storyDiff = existingStory.diffTwo(story)
+                delete storyCache[story.id]
+                if(storyDiff && storyDiff.changeType !== 'Unchanged') {
+                    sectionDiff.stories.push(storyDiff)
+                }
+            }
+        })
+
+        // The remaining is deleted
+        for (const key in storyCache) {
+            if (storyCache.hasOwnProperty(key)) {
+                const element = storyCache[key]
+                sectionDiff.stories.push({ id: element.id, changeType: 'Deleted'})
+            }
+        }
+
+        return sectionDiff
+    }
     diff(otherSection?: SheetSection): SheetSectionDiff {
         let sectionDiff: SheetSectionDiff = { hasChanges: false, newValue: otherSection }
         if(!otherSection) {
@@ -82,17 +151,27 @@ export class SheetSection implements Section {
             const newStory = otherSection.stories[sectionIndex]
             if(existingStory) {
                 const storyDiff = existingStory.diff(newStory)
-                sectionDiff.hasChanges = sectionDiff.hasChanges || storyDiff.hasChanges
+                // sectionDiff.hasChanges = sectionDiff.hasChanges || storyDiff.hasChanges
                 sectionDiff.stories.push(storyDiff)
             } else {
                 let storyDiff: SheetStoryDiff = { hasChanges: true, newValue: newStory }
                 // TODO: technically, all the values goes from undefined to something (potentially)
                 // However; Not sure if we should care. We are just going to send the "newValue" anyway
-                sectionDiff.hasChanges = sectionDiff.hasChanges || storyDiff.hasChanges
+                // sectionDiff.hasChanges = sectionDiff.hasChanges || storyDiff.hasChanges
                 sectionDiff.stories.push(storyDiff)
             }
         }
 
         return sectionDiff
     }
+
+    static newSectionDiff(section: SheetSection): SheetSectionDiffWithType {
+        let diff: SheetSectionDiffWithType = {
+           changeType: 'New',
+           id: section.id,
+           newValue: section,
+           stories: section.stories.map(SheetStory.newStoryDiff)
+        }
+        return diff
+     }
  }

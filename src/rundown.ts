@@ -19,8 +19,8 @@ import { SheetStory } from './classes/Story'
  */
 
 interface RundownMetaData {
-    startTime: string
-    endTime: string
+    startTime: Date
+    endTime: Date
 }
 
 interface ParsedRow {
@@ -38,12 +38,12 @@ interface ParsedRow {
     // [key: string]: string | undefined // Can't enforce formatting here; https://github.com/Microsoft/TypeScript/issues/6579
 }
 
-export class Rundown {
+export class RunningOrderParser {
     constructor(private cells: any[][], private name: string, private sheetId: string) { }
-    private parseRawData(): {rows: ParsedRow[], meta: RundownMetaData}{
+    private parseRawData(): {rows: ParsedRow[], meta: RundownMetaData} {
         let metaRow = this.cells[0] || []
-        let runningOrderStartTime = metaRow[1]
-        let runningOrderEndTime = metaRow[3]
+        let runningOrderStartTime = new Date(Date.parse(metaRow[1]))
+        let runningOrderEndTime = new Date(Date.parse(metaRow[3]))
         let tablesRow = this.cells[1] || []
         let tablePositions: any = {}
         let inverseTablePositions: {[key: number]: string} = {}

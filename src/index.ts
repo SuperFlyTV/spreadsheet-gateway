@@ -4,11 +4,15 @@ import * as fs from 'fs'
 import * as readline from 'readline'
 import { google } from 'googleapis'
 import { OAuth2Client } from 'google-auth-library'
-import { Rundown } from './rundown'
+import { RunningOrderParser } from './rundown'
+import { SheetRunningOrder } from "./classes/RunningOrder";
+
+import * as cellData from './classes/__tests__/cellValues.json'
 
 // If modifying these scopes, delete token.json.
 // const SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 const SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+const SCOPES_WRITEBACK = ['https://www.googleapis.com/auth/spreadsheets']
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
@@ -31,15 +35,22 @@ fs.readFile('credentials.json', (err, content) => {
             .then(sheetObject => {
                 console.log('values', sheetObject.values)
                 const rundownTitle = sheetObject.meta.properties ? sheetObject.meta.properties.title || 'unknown' : 'unknown'
-                const rundown = new Rundown(sheetObject.values.values || [], rundownTitle, sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
+                const rundown = new RunningOrderParser((cellData as any).values || [], rundownTitle, sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ')
+                const runningOrder = SheetRunningOrder.fromSheetCells(sheetObject.meta.spreadsheetId || '1a3emVzh9LSk9J-eVjfVdKTQKR79eiss3ROZBjKDb0GQ', rundownTitle, sheetObject.values.values || [])
                 console.log('we have a rundown')
                 let parsedRundown = rundown.toRunningOrder()
-                let parsedRundownTwo = rundown.toRunningOrder()
+                let parsedRundownTwo = runningOrder
                 console.log('omg. parsed rundown;', parsedRundown)
                 console.log(JSON.stringify(parsedRundown))
                 parsedRundownTwo.name = 'Something else'
                 parsedRundownTwo.sections.pop()
-                let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
+                parsedRundownTwo.sections[0].stories[0].name ='this other name here'
+                //let theDiff = parsedRundown.diffTwo(parsedRundownTwo)
+                let theDiff = parsedRundown.diffThree(parsedRundownTwo)
+                console.log('diff3', theDiff)
+                let flatDiffs = parsedRundown.diffWithTypeToFlatDiff(theDiff)
+                console.log('flatDiffs', flatDiffs)
+
                 // parsedRundown.diff(parsedRundownTwo)
             })
             .catch(error => {
