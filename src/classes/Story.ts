@@ -27,19 +27,6 @@ export interface SheetStoryDiffWithType extends hasChangeType {
    script?: string
    items?: Item[]
 }
-export interface SheetStoryDiff {
-   hasChanges: boolean
-   newValue?: SheetStory
-
-   type?: string
-   sectionId?: string
-   id?: string
-   rank?: number
-   name?: string
-   float?: boolean
-   script?: string
-   items?: Item[]
-}
 
 export class SheetStory implements Story {
 
@@ -60,7 +47,7 @@ export class SheetStory implements Story {
       this.items.push(item)
    }
 
-   diffTwo(otherStory?: SheetStory): SheetStoryDiffWithType {
+   diff(otherStory?: SheetStory): SheetStoryDiffWithType {
       let storyDiff: SheetStoryDiffWithType = { id: this.id, changeType: 'Unchanged', newValue: otherStory }
       if (!otherStory) {
          storyDiff.changeType = 'Deleted'
@@ -102,47 +89,6 @@ export class SheetStory implements Story {
          if (hasChanges) {
             storyDiff.changeType = 'Edited'
          }
-      }
-
-      return storyDiff
-   }
-
-   diff(otherStory?: SheetStory): SheetStoryDiff {
-      let storyDiff: SheetStoryDiff = { hasChanges: false, newValue: otherStory }
-      if (!otherStory) {
-         storyDiff.hasChanges = true
-         return storyDiff
-      }
-      for (const key in otherStory) {
-         switch (key) {
-            case 'type':
-            case 'sectionId':
-            case 'id':
-            case 'rank':
-            case 'name':
-            case 'float':
-            case 'script':
-               const isDifferent = this[key] !== (otherStory as any)[key]
-               storyDiff[key] = isDifferent ? (otherStory as any)[key] : undefined
-               if (isDifferent) {
-                  storyDiff.hasChanges = true
-               }
-               break
-            case 'items':
-               // Will tackle this separately
-               break;
-            default:
-               break;
-         }
-      }
-
-      storyDiff.items = otherStory.items
-      if (this.items.length !== otherStory.items.length) {
-         storyDiff.hasChanges = true
-      } else {
-         this.items.forEach((existingItem, sectionIndex) => {
-            storyDiff.hasChanges = storyDiff.hasChanges || !existingItem.equal(otherStory.items[sectionIndex])
-         })
       }
 
       return storyDiff

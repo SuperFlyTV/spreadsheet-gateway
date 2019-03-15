@@ -1,11 +1,10 @@
-import { Section, SheetSection, SheetSectionDiff, SheetSectionDiffWithType } from './Section'
-import { diff as diffFake } from 'deep-object-diff'
-import { diff, Diff } from 'deep-diff'
-import { RunningOrderWatcher } from '../runningOrderWatcher';
-import { hasChangeType } from './hasChangeType';
-import { SheetStoryDiffWithType, SheetStory } from './Story';
 import { v1 as uuidV1 } from 'uuid'
-import { SheetItem } from './Item';
+
+import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
+import { RunningOrderWatcher } from '../runningOrderWatcher'
+import { hasChangeType } from './hasChangeType'
+import { SheetStory } from './Story'
+import { SheetItem } from './Item'
 // import { diff, addedDiff, deletedDiff, updatedDiff, detailedDiff } from 'deep-object-diff'
 
 
@@ -113,16 +112,6 @@ export interface RunningOrderWithSections extends RunningOrder {
     sections: Section[]
 }
 
-export interface SheetRunningOrderDiff {
-    hasChanges: boolean
-    newValue?: RunningOrder
-
-    id?: string
-    name?: string
-    expectedStart?: Date
-    expectedEnd?: Date
-    sections?: SheetSectionDiff[]
-}
 export interface SheetRunningOrderDiffWithType extends hasChangeType {
     newValue?: RunningOrder // The full new value of the element
 
@@ -204,7 +193,7 @@ export class SheetRunningOrder implements RunningOrder {
             stories: flatDiffStories
         }
     }
-    diffThree(otherRunningOrder?: SheetRunningOrder): SheetRunningOrderDiffWithType {
+    diff(otherRunningOrder?: SheetRunningOrder): SheetRunningOrderDiffWithType {
         let runningOrderDiff: SheetRunningOrderDiffWithType = { id: this.id, changeType: 'Unchanged', newValue: otherRunningOrder, sections: []}
         if(!otherRunningOrder) {
             runningOrderDiff.changeType = 'Deleted'
@@ -239,7 +228,7 @@ export class SheetRunningOrder implements RunningOrder {
             if(!existingSection) {
                 runningOrderDiff.sections.push(SheetSection.newSectionDiff(section)) // new section
             } else {
-                let sectionDiff = existingSection.diffTwo(section)
+                let sectionDiff = existingSection.diff(section)
                 delete sectionCache[section.id]
                 if(sectionDiff && sectionDiff.changeType !== 'Unchanged') {
                     runningOrderDiff.sections.push(sectionDiff)
@@ -256,139 +245,7 @@ export class SheetRunningOrder implements RunningOrder {
         }
         return runningOrderDiff
     }
-    // diffTwo(otherRunningOrder?: SheetRunningOrder): SheetRunningOrderDiff {
-    //     let runningOrderDiff: SheetRunningOrderDiff = { hasChanges: false, newValue: otherRunningOrder }
-    //     if(!otherRunningOrder) {
-    //         runningOrderDiff.hasChanges = true
-    //         return runningOrderDiff
-    //     }
-    //     for (const key in otherRunningOrder) {
-    //         switch (key) {
-    //             case 'id':
-    //             case 'name':
-    //             case 'expectedStart':
-    //             case 'expectedEnd':
-    //                 const isDifferent = this[key] !== (otherRunningOrder as any)[key]
-    //                 runningOrderDiff[key] = isDifferent ? (otherRunningOrder as any)[key] : undefined
-    //                 runningOrderDiff.hasChanges = runningOrderDiff.hasChanges || isDifferent
-    //                 break
-    //             case 'sections':
-    //                 break;
-    //             default:
-    //                 break;
-    //         }
-    //     }
-
-    //     let storiesSize = Math.max(this.sections.length, otherRunningOrder.sections.length)
-
-    //     runningOrderDiff.sections = []
-    //     for (let sectionIndex = 0; sectionIndex < storiesSize; sectionIndex++) {
-    //         const existingSection = this.sections[sectionIndex]
-    //         const newSection = otherRunningOrder.sections[sectionIndex]
-    //         if(existingSection) {
-    //             const storyDiff = existingSection.diff(newSection)
-    //                     // runningOrderDiff.hasChanges = runningOrderDiff.hasChanges || storyDiff.hasChanges
-    //             runningOrderDiff.sections.push(storyDiff)
-    //         } else {
-    //             let sectionDiff: SheetSectionDiff = { hasChanges: true, newValue: newSection }
-    //             // TODO: technically, all the values goes from undefined to something (potentially)
-    //             // However; Not sure if we should care. We are just going to send the "newValue" anyway
-    //                     // runningOrderDiff.hasChanges = runningOrderDiff.hasChanges || sectionDiff.hasChanges
-    //             runningOrderDiff.sections.push(sectionDiff)
-    //         }
-    //     }        
-
-
-    //     // let firstSections = this.sections
-    //     // let secondSections = otherRunningOrder.sections
-
-    //     // if(this.sections.length < otherRunningOrder.sections.length) {
-    //     //     firstSections = otherRunningOrder.sections
-    //     //     secondSections = this.sections
-    //     // }
-    //     // runningOrderDiff.sections = firstSections.map((section, index) => {
-    //     //     return section.diff(secondSections[index])
-    //     // })
-
-    //     return runningOrderDiff
-    // }
-    // diff(otherRunningOrder: SheetRunningOrder) {
-    //     let result = diffFake(this, otherRunningOrder)
-    //     let resultTwo = diff(this, otherRunningOrder)
-    //     // // console.log('result', result)
-    //     // // console.log('resultTwo', resultTwo)
-    //     // let newThis = deepCopy<SheetRunningOrder>(this)
-
-    //     // let diffCopy = diffFake(this, newThis)
-    //     // console.log('diffCopy', diffCopy);
-    //     // let a = newThis.updateFromDiff(result)
-
-    //     // let result2 = diffFake(this, a)
-    //     // console.log('what is result2', result2)
-    //     // // if (resultTwo) {
-    //     // //     this.createDiffObjects(resultTwo)
-    //     // // }
-
-    //     // let diffCopyNsiep = diffFake(this, newThis)
-    //     // console.log('diffCopyNsiep', diffCopyNsiep);
-
-    //     return this.createDiffObjects(result, resultTwo)
-    // }
-
-    // // diffToTransportData(runningOrderDiff: SheetRunningOrderDiff) {
-    // //     let changes = []
-    // //     if(runningOrderDiff.hasChanges) {
-    // //         changes.push(runningOrderDiff.new)
-    // //     }
-    // // }
-
-    // updateFromDiff(diff: any) {
-    //     return mergeDeep(this, diff)
-    // }
-    // private createDiffObjects(diffObject: any, diffs?: Diff<this, SheetRunningOrder>[]) {
-    //     let runningOrderDiff = {}
-    //     let sectionDiffs = []
-    //     let storyDiffs = []
-    //     if(diffs){
-    //         diffs.forEach(diff => {
-    //             switch (diff.kind) {
-    //                 case 'N': // DiffNew
-    //                     break
-    //                 case 'D': // DiffDeleted
-    //                     break
-    //                 case 'E': // DiffEdit
-    //                     break
-    //                 case 'A': // DiffArray
-    //                     break;
-    //                 default:
-    //                     break;
-    //             }
-    //             if (diff.path) {
-    //                 let tempObject: any = this
-    //                 diff.path.forEach(pathPart => {
-    //                     if(tempObject){
-    //                         tempObject = tempObject[pathPart]
-    //                     } else {
-    //                         // does not exists
-    //                     }
-    //                 })
-    //             }
-    //         })
-    //     }
-
-    //     // let resultDiffObject = {}
-    //     // if(diffObject){
-    //     //     diffObject.
-    //     // } else {
-    //     //     // Nothing has changed
-    //     //     return {}
-    //     // }
-
-    // }
-
-
-
-    // constructor(private cells: any[][], private name: string, private sheetId: string) { }
+   
     private static parseRawData(cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
         let metaRow = cells[0] || []
         let runningOrderStartTime = metaRow[1]
