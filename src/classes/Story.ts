@@ -96,6 +96,12 @@ export class SheetStory implements Story {
       return storyDiff
    }
 
+   /**
+    * Create a SheetStoryDiffWithType that indicates a new instance
+    * of a Story.
+    * 
+    * @param story Existing SheetStory item to make "New" diff from
+    */
    static newStoryDiff(story: SheetStory): SheetStoryDiffWithType {
       let diff: SheetStoryDiffWithType = {
          changeType: 'New',

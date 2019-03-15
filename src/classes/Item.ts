@@ -8,7 +8,7 @@ export interface Item {
     clipName: string
     attributes: {
         [key: string]: string
-    } // ex {attr0: 'hello'}
+    }
 }
 export interface SheetsItem extends Item {
     position: string // A3:A9

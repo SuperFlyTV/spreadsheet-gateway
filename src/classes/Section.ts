@@ -29,13 +29,6 @@ export interface SheetSectionDiffWithType extends SheetSectionDiffFlat, hasChang
     stories: SheetStoryDiffWithType[]
 }
 export class SheetSection implements Section {
-    // runningOrderId: string
-    // id: string // unique within the parent runningOrder
-    // rank: number
-    // name: string
-    // float: boolean
- 
-    // stories: Story[]
     constructor(
         public runningOrderId: string,
         public id: string,
@@ -71,7 +64,6 @@ export class SheetSection implements Section {
                     }
                     break
                 case 'stories':
-                    // Will tackle this separately
                     break;
                 default:
                     break;

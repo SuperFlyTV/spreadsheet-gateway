@@ -9,11 +9,17 @@ export interface SheetUpdate {
     value: string
     cellPosition: string
 }
+
 export class SheetsManager {
 
     constructor(private auth: OAuth2Client) { }
 
-    
+    /**
+     * Creates a Google Sheets api-specific change element
+     * 
+     * @param cell Cell range for the cell being updated. Eg. "A2"
+     * @param newValue The new value for the cell
+     */
     static createSheetValueChange(cell: string, newValue: any): sheets_v4.Schema$ValueRange {
         return {
             range: `${cell}:${cell}`, // Maybe we don't need the `:`?
@@ -21,6 +27,11 @@ export class SheetsManager {
         }
     }
 
+    /**
+     * Downloads and parses a Running Order for google sheets
+     * 
+     * @param rundownSheetId Id of the google sheet containing the Running Order
+     */
     downloadRunningOrder(rundownSheetId: string): Promise<SheetRunningOrder> {
         return this.downloadSheet(rundownSheetId)
         .then(data => {
@@ -29,6 +40,11 @@ export class SheetsManager {
         })
     }
 
+    /**
+     * Downloads raw data from google spreadsheets
+     *
+     * @param spreadsheetId Id of the google spreadsheet to download
+     */
     downloadSheet(spreadsheetId: string) {
         const request = {
             // The spreadsheet to request.
@@ -54,6 +70,12 @@ export class SheetsManager {
     
     }
     
+    /**
+     * Update the values of the google spreadsheet in google drive (external).
+     * 
+     * @param spreadsheetId Id of spreadsheet to update
+     * @param sheetUpdates List of updates to issue to the google spreadsheet
+     */
     updateSheet(spreadsheetId: string, sheetUpdates: sheets_v4.Schema$ValueRange[]) {
         let request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
             spreadsheetId: spreadsheetId,
@@ -70,6 +92,12 @@ export class SheetsManager {
         return sheets.spreadsheets.values.batchUpdate(request)
     }
 
+    /**
+     * Returns a list of ids of Google Spreadsheets in provided folder.
+     * If multiple folders have the same name, the first folder is selected.
+     * 
+     * @param folderName Name of Google Drive folder
+     */
     getSheetsInDriveFolder(folderName: string): Promise<string[]> {
         const drive = google.drive({ version: 'v3', auth: this.auth });
         return drive.files.list({
@@ -89,12 +117,16 @@ export class SheetsManager {
             }
         })
     }
+    /**
+     * Returns a list of ids of Google Spreadsheets in provided folder.
+     * 
+     * @param folderId Id of Google Drive folder to retrieve spreadsheets from
+     * @param nextPageToken Google drive nextPageToken pagination token.
+     */
     getSheetsInDriveFolderId(folderId: string, nextPageToken?: string): Promise<string[]> {
         const drive = google.drive({ version: 'v3', auth: this.auth });
         return drive.files.list({
             q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
-            // q: `mimeType='application/vnd.google-apps.folder' and name='${name}'`,
-            // pageSize: 10,
             spaces: 'drive',
             fields: 'nextPageToken, files(*)',
             pageToken: nextPageToken

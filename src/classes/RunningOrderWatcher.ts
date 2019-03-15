@@ -10,6 +10,15 @@ export class RunningOrderWatcher extends EventEmitter {
     private runningOrderIdDictionary: { [runningOrderId: string]: SheetRunningOrder } = {}
     private currentlyChecking: boolean = false
     private sheetManager: SheetsManager
+    /**
+     * A Running Order watcher which will poll Google Drive for changes and emit events
+     * whenever a change occurs.
+     * 
+     * @param runningOrders List of existing SheetRunningOrders
+     * @param pollIntervalMS Poll interval in milliseconds. Eg. 10000 => 10 seconds
+     * @param authClient Google OAuth2Clint containing connection information
+     * @param delayStart (Optional) Set to a falsy value to prevent the watcher to start watching immediately.
+     */
     constructor(public runningOrders: SheetRunningOrder[], public pollIntervalMS: number, private authClient: OAuth2Client, delayStart?: boolean) {
         super()
         this.drive = google.drive({ version: 'v3', auth: this.authClient })
@@ -22,13 +31,23 @@ export class RunningOrderWatcher extends EventEmitter {
         }
     }
 
+    /**
+     * Add a Running Order from Google Sheets ID
+     * 
+     * @param runningOrderId Id of Running Order Sheet on Google Sheets
+     */
     addRunningOrderById(runningOrderId: string) {
         return this.sheetManager.downloadRunningOrder(runningOrderId)
             .then(runningOrder => {
                 this.addRunningOrder(runningOrder)
             })
     }
-
+    /**
+     * Will add all currently available Running Orders from the first drive folder
+     * matching the provided name
+     * 
+     * @param sheetFolderName Name of folder to add Running Orders from. Eg. "My Running Orders"
+     */
     addSheetsFolderToWatch(sheetFolderName: string) {
         return this.sheetManager.getSheetsInDriveFolder(sheetFolderName)
             .then(runningOrderIds => {
@@ -38,12 +57,18 @@ export class RunningOrderWatcher extends EventEmitter {
             })
     }
 
+    /**
+     * Start the watcher
+     */
     startWatcher() {
         console.log('Starting Watcher')
         this.stopWatcher()
         this.interval = setInterval(this.onInterval.bind(this), this.pollIntervalMS)
     }
 
+    /**
+     * Stop the watcher
+     */
     stopWatcher() {
         if (this.interval) {
             console.log('Stopping Watcher')
@@ -51,7 +76,11 @@ export class RunningOrderWatcher extends EventEmitter {
             this.interval = undefined
         }
     }
-
+    /**
+     * Deletes a running order from the watcher, removing it from the watch list.
+     * 
+     * @param runningOrderId Id of running order to delete
+     */
     deleteRunningOrder(runningOrderId: string) {
         console.log('Removing running order', runningOrderId)
         delete this.runningOrderIdDictionary[runningOrderId]
