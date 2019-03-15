@@ -14,7 +14,6 @@ const TOKEN_PATH = 'token.json';
 fs.readFile('credentials.json', (err, content) => {
     if (err) return console.log('Error loading client secret file:', err);
     getAuthClient(JSON.parse(content.toString())).then(authClient => {
-        console.log('starting watcher')
         let watcher = new RunningOrderWatcher([], 20000, authClient)
         watcher.addSheetsFolderToWatch('superflytv-running-orders')
         .then(result => {

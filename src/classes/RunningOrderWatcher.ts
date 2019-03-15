@@ -3,6 +3,7 @@ import { SheetRunningOrder, SheetRunningOrderDiffWithType } from './RunningOrder
 import { OAuth2Client } from 'googleapis-common';
 import { google, drive_v3 } from 'googleapis';
 import { SheetsManager } from './SheetManager'
+
 export class RunningOrderWatcher extends EventEmitter {
     private interval: NodeJS.Timeout | undefined
     private pageToken?: string
@@ -86,6 +87,21 @@ export class RunningOrderWatcher extends EventEmitter {
         delete this.runningOrderIdDictionary[runningOrderId]
         this.runningOrders = this.runningOrders.filter(ro => { return ro.id !== runningOrderId })
     }
+    /**
+     * Update existing running order with new one.
+     *
+     * @param newRunningOrder Running order that supercedes the old one
+     */
+    updateRunningOrder(newRunningOrder: SheetRunningOrder) {
+        this.runningOrderIdDictionary[newRunningOrder.id] = newRunningOrder
+        this.runningOrders = this.runningOrders.map(ro => {
+            if(ro.id === newRunningOrder.id) {
+                return newRunningOrder
+            } else {
+                return ro
+            }
+        })
+    }
     addRunningOrder(runningOrder: SheetRunningOrder) {
         console.log('added running order', runningOrder.id)
         this.runningOrderIdDictionary[runningOrder.id] = runningOrder
@@ -94,14 +110,17 @@ export class RunningOrderWatcher extends EventEmitter {
 
     private onInterval() {
         if (this.currentlyChecking) {
+            console.log('ignoring. Currently checking')
             return
         }
+        console.log('Running interval')
         this.currentlyChecking = true
         this.checkForChanges()
             .catch(error => {
                 console.error('Something went wrong during checking', error, error.stack)
             })
             .then(() => {
+                console.log('Interval done')
                 this.currentlyChecking = false
             })
     }
@@ -142,6 +161,7 @@ export class RunningOrderWatcher extends EventEmitter {
                 this.sheetManager.downloadRunningOrder(fileId)
                     .then(newRunningOrder => {
                         let runningOrderDiff = currentRunningOrder.diff(newRunningOrder)
+                        this.updateRunningOrder(newRunningOrder)
                         this.processChangeDiff(runningOrderDiff)
                     })
             }
