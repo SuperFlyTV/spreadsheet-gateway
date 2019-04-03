@@ -1,3 +1,3 @@
 export interface hasChangeType {
-    changeType: 'Unchanged' | 'New' | 'Deleted' | 'Edited';
+	changeType: 'Unchanged' | 'New' | 'Deleted' | 'Edited'
 }
