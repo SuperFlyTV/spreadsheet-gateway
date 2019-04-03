@@ -70,15 +70,12 @@ export class SheetsManager {
 
 	}
 
-	updateSheetWithSheetUpdates (spreadsheetId: string, sheetUpdates: SheetUpdate[]) {
+	async updateSheetWithSheetUpdates (spreadsheetId: string, sheetUpdates: SheetUpdate[]) {
 		let googleUpdates = sheetUpdates.map(update => {
 			return SheetsManager.createSheetValueChange(update.cellPosition, update.value)
 		})
 		return this.updateSheet(spreadsheetId, googleUpdates)
-		.then((res) => {
-			console.log('Sheet updated', spreadsheetId)
-			return res
-		})
+
 	}
 
 	/**
@@ -109,24 +106,28 @@ export class SheetsManager {
 	 *
 	 * @param folderName Name of Google Drive folder
 	 */
-	getSheetsInDriveFolder (folderName: string): Promise<string[]> {
+	async getSheetsInDriveFolder (folderName: string): Promise<string[]> {
 		const drive = google.drive({ version: 'v3', auth: this.auth })
-		return drive.files.list({
+
+		const fileList = await drive.files.list({
 			// q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
 			q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}'`,
-			pageSize: 10,
+			pageSize: 100,
 			spaces: 'drive',
 			fields: 'nextPageToken, files(*)'
 		})
-		.then(fileList => {
-			// Use first hit only. We assume that that would be the correct folder.
-			// If you have multiple folders with the same name, it will become un-deterministic
-			if (fileList.data.files && fileList.data.files[0] && fileList.data.files[0].id) {
-				return this.getSheetsInDriveFolderId(fileList.data.files[0].id)
-			} else {
-				return []
-			}
-		})
+		// Use first hit only. We assume that that would be the correct folder.
+		// If you have multiple folders with the same name, it will become un-deterministic
+		if (
+			fileList.data.files &&
+			fileList.data.files[0] &&
+			fileList.data.files[0].id
+		) {
+			return this.getSheetsInDriveFolderId(fileList.data.files[0].id)
+		} else {
+			return []
+		}
+
 	}
 	/**
 	 * Returns a list of ids of Google Spreadsheets in provided folder.
@@ -134,31 +135,31 @@ export class SheetsManager {
 	 * @param folderId Id of Google Drive folder to retrieve spreadsheets from
 	 * @param nextPageToken Google drive nextPageToken pagination token.
 	 */
-	getSheetsInDriveFolderId (folderId: string, nextPageToken?: string): Promise<string[]> {
+	async getSheetsInDriveFolderId (folderId: string, nextPageToken?: string): Promise<string[]> {
 		const drive = google.drive({ version: 'v3', auth: this.auth })
-		return drive.files.list({
+
+		const fileList = await drive.files.list({
 			q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
 			spaces: 'drive',
 			fields: 'nextPageToken, files(*)',
 			pageToken: nextPageToken
 		})
-		.then(fileList => {
-			let resultData = (fileList.data.files || [])
-			.filter(file => {
-				return file.id
-			})
-			.map(file => {
-				return file.id || ''
-			})
 
-			if (fileList.data.nextPageToken) {
-				return this.getSheetsInDriveFolderId(folderId, fileList.data.nextPageToken)
-				.then(result => {
-					return resultData.concat(result)
-				})
-			} else {
-				return resultData
-			}
+		let resultData = (fileList.data.files || [])
+		.filter(file => {
+			return file.id
 		})
+		.map(file => {
+			return file.id || ''
+		})
+
+		if (fileList.data.nextPageToken) {
+			const result = await this.getSheetsInDriveFolderId(folderId, fileList.data.nextPageToken)
+
+			return resultData.concat(result)
+		} else {
+			return resultData
+		}
+
 	}
 }

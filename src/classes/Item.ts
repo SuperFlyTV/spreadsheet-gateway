@@ -1,5 +1,3 @@
-import deepEqual = require('deep-equal')
-
 export interface Item {
 	id: string
 	objectType: string
@@ -26,8 +24,4 @@ export class SheetItem implements Item {
 		},
 		public position: string
 	) { }
-
-	equal (otherItem?: SheetItem): boolean {
-		return deepEqual(this, otherItem)
-	}
 }

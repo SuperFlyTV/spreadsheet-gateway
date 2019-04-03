@@ -1,13 +1,13 @@
 import { v4 as uuidV4 } from 'uuid'
-import { Section, SheetSection, SheetSectionDiffWithType } from './Section'
-import { hasChangeType } from './hasChangeType'
-import { SheetStory, SheetStoryDiffFlat } from './Story'
+import { SheetSection } from './Section'
+import { SheetStory } from './Story'
 import { SheetItem } from './Item'
 import { SheetUpdate, SheetsManager } from './SheetManager'
+import * as _ from 'underscore'
 
 interface RundownMetaData {
-	startTime: Date
-	endTime: Date
+	startTime: number
+	endTime: number
 }
 
 interface ParsedRow {
@@ -35,26 +35,8 @@ interface ParsedRow {
 export interface RunningOrder {
 	id: string
 	name: string // namnet på sheeten
-	expectedStart: Date // unix time (when sending over-the-wire)
-	expectedEnd: Date // unix time
-
-	//    position: string // ex A4:Z15
-}
-
-export interface RunningOrderWithSections extends RunningOrder {
-	sections: Section[]
-}
-
-export interface SheetRunningOrderDiffFlat extends hasChangeType {
-	newValue?: RunningOrder // The full new value of the element
-
-	id: string // If defined, has the new, edited, value of the parameter
-	name?: string
-	expectedStart?: Date
-	expectedEnd?: Date
-}
-export interface SheetRunningOrderDiffWithType extends SheetRunningOrderDiffFlat, hasChangeType {
-	sections: SheetSectionDiffWithType[] // Contains a list of section-diffs. If empty, no changes.
+	expectedStart: number // unix time
+	expectedEnd: number // unix time
 }
 
 export class SheetRunningOrder implements RunningOrder {
@@ -66,125 +48,21 @@ export class SheetRunningOrder implements RunningOrder {
 	constructor (
 		public id: string,
 		public name: string,
-		public expectedStart: Date,
-		public expectedEnd: Date,
-		public sections: SheetSection[] = []) { }
+		public expectedStart: number,
+		public expectedEnd: number,
+		public sections: { [sectionId: string]: SheetSection } = {}
+	) {}
 
-	addSections (sections: SheetSection[]) {
-		this.sections = this.sections.concat(sections)
-	}
-	static DiffWithTypeToFlatDiff (diffs: SheetRunningOrderDiffWithType) {
-		let flatDiffRunningOrders: SheetRunningOrderDiffFlat[] = []
-		let flatDiffSections: SheetSectionDiffWithType[] = []
-		let flatDiffStories: SheetStoryDiffFlat[] = []
-
-		if (diffs) {
-			if (diffs.changeType !== 'Unchanged') {
-				let diffObjectRunningOrder: any = { id: diffs.id, changeType: diffs.changeType }
-				for (const key in diffs.newValue) {
-					if (diffs.newValue.hasOwnProperty(key)) {
-						const element: any = (diffs.newValue as any)[key]
-						if (element && key !== 'sections') {
-							diffObjectRunningOrder[key] = element
-						}
-					}
-				}
-				flatDiffRunningOrders.push(diffObjectRunningOrder)
-			}
-			// TODO: Parent relationship is not properly propagated
-			diffs.sections.forEach(section => {
-				if (section.changeType !== 'Unchanged') {
-					let diffObjectSection: any = { id: section.id, changeType: section.changeType }
-					for (const key in section.newValue) {
-						if (section.newValue.hasOwnProperty(key)) {
-							const element: any = (section.newValue as any)[key]
-							if (element && key !== 'stories') {
-								diffObjectSection[key] = element
-							}
-						}
-					}
-					flatDiffSections.push(diffObjectSection)
-				}
-				section.stories.forEach(story => {
-					if (story.changeType !== 'Unchanged') {
-						let diffObjectStory: any = { id: story.id, changeType: story.changeType }
-						for (const key in story.newValue) {
-							if (story.newValue.hasOwnProperty(key)) {
-								const element: any = (story.newValue as any)[key]
-								if (element && key !== 'items') {
-									diffObjectStory[key] = element
-								}
-							}
-						}
-						flatDiffStories.push(diffObjectStory)
-					}
-				})
-			})
-		}
-
+	serialize (): RunningOrder {
 		return {
-			runningOrders: flatDiffRunningOrders,
-			sections: flatDiffSections,
-			stories: flatDiffStories
+			id:				this.id,
+			name:			this.name,
+			expectedStart:	this.expectedStart,
+			expectedEnd:	this.expectedEnd
 		}
 	}
-	diff (otherRunningOrder?: SheetRunningOrder): SheetRunningOrderDiffWithType {
-		let runningOrderDiff: SheetRunningOrderDiffWithType = { id: this.id, changeType: 'Unchanged', newValue: otherRunningOrder, sections: [] }
-		if (!otherRunningOrder) {
-			runningOrderDiff.changeType = 'Deleted'
-			return runningOrderDiff
-		}
-		for (const key in otherRunningOrder) {
-			switch (key) {
-				case 'id':
-				case 'name':
-					const isDifferent = this[key] !== otherRunningOrder[key]
-					if (isDifferent) {
-						runningOrderDiff[key] = otherRunningOrder[key]
-						runningOrderDiff.changeType = 'Edited'
-					}
-					break
-				case 'expectedStart':
-				case 'expectedEnd':
-					const isDifferentTime = this[key].getTime() !== otherRunningOrder[key].getTime()
-					if (isDifferentTime) {
-						runningOrderDiff[key] = otherRunningOrder[key]
-						runningOrderDiff.changeType = 'Edited'
-					}
-					break
-				case 'sections':
-					break
-				default:
-					break
-			}
-		}
-
-		let sectionCache: {[sectionId: string]: SheetSection } = {}
-
-		this.sections.forEach(section => {
-			sectionCache[section.id] = section
-		})
-		otherRunningOrder.sections.forEach(section => {
-			let existingSection = sectionCache[section.id]
-			if (!existingSection) {
-				runningOrderDiff.sections.push(SheetSection.newSectionDiff(section)) // new section
-			} else {
-				let sectionDiff = existingSection.diff(section)
-				delete sectionCache[section.id]
-				if (sectionDiff && sectionDiff.changeType !== 'Unchanged') {
-					runningOrderDiff.sections.push(sectionDiff)
-				}
-			}
-		})
-
-		// The remaining is deleted
-		for (const key in sectionCache) {
-			if (sectionCache.hasOwnProperty(key)) {
-				const element = sectionCache[key]
-				runningOrderDiff.sections.push({ id: element.id, changeType: 'Deleted', stories: [] })
-			}
-		}
-		return runningOrderDiff
+	addSections (sections: SheetSection[]) {
+		sections.forEach(section => this.sections[section.id] = section)
 	}
 
 	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
@@ -202,9 +80,18 @@ export class SheetRunningOrder implements RunningOrder {
 		})
 		let parsedRows: ParsedRow[] = []
 		for (let rowNumber = 3; rowNumber < cells.length; rowNumber++) {
+
 			let row = cells[rowNumber]
 			if (row) {
-				let rowItem: ParsedRow = { meta: { rowPosition: rowNumber, propColPosition: {} }, data: { float: 'FALSE' } }
+				let rowItem: ParsedRow = {
+					meta: {
+						rowPosition: rowNumber,
+						propColPosition: {}
+					},
+					data: {
+						float: 'FALSE'
+					}
+				}
 				row.forEach((cell, columnNumber) => {
 					const attr = inverseTablePositions[columnNumber]
 					rowItem.meta.propColPosition[attr] = columnNumber
@@ -235,11 +122,19 @@ export class SheetRunningOrder implements RunningOrder {
 							break
 					}
 				})
-				parsedRows.push(rowItem)
+
+				if (// Only add non-empty rows:
+					rowItem.data.name ||
+					rowItem.data.type ||
+					rowItem.data.objectType
+				) {
+					parsedRows.push(rowItem)
+				}
+
 			}
 		}
-		let parsedStartTime = new Date(Date.parse(runningOrderStartTime))
-		let parsedEndTime = new Date(Date.parse(runningOrderEndTime))
+		let parsedStartTime = new Date(Date.parse(runningOrderStartTime)).getTime()
+		let parsedEndTime = new Date(Date.parse(runningOrderEndTime)).getTime()
 		return {
 			rows: parsedRows,
 			meta: {
@@ -273,7 +168,7 @@ export class SheetRunningOrder implements RunningOrder {
 			if (!id) {
 				id = uuidV4()
 				// Update sheet with new ids
-				let rowPosition = row.meta.rowPosition
+				let rowPosition = row.meta.rowPosition + 1
 				let colPosition = this.columnToLetter(row.meta.propColPosition['id'] + 1)
 
 				currentSheetUpdate = {
@@ -287,7 +182,7 @@ export class SheetRunningOrder implements RunningOrder {
 						section.addStory(story)
 						story = undefined
 					}
-					if (!(section.id === implicitId && section.stories.length === 0)) {
+					if (!(section.id === implicitId && _.keys(section.stories).length === 0)) {
 						sections.push(section)
 					}
 
@@ -319,7 +214,7 @@ export class SheetRunningOrder implements RunningOrder {
 						section.addStory(story)
 						story = undefined
 					}
-					story = new SheetStory(row.data.type, section.id, id, section.stories.length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+					story = new SheetStory(row.data.type, section.id, id, _.keys(section.stories).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
 						const firstItem = new SheetItem(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
 						story.addItem(firstItem)
@@ -329,6 +224,9 @@ export class SheetRunningOrder implements RunningOrder {
 					break
 			}
 			if (currentSheetUpdate) {
+				// console.log('creating a new id for row', currentSheetUpdate.value)
+				// console.log(row)
+
 				sheetUpdates.push(currentSheetUpdate)
 			}
 		})
@@ -367,7 +265,7 @@ export class SheetRunningOrder implements RunningOrder {
 		runningOrder.addSections(results.sections)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
-			sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates)
+			sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates).catch(console.error)
 		}
 		return runningOrder
 	}
