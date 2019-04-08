@@ -56,9 +56,9 @@ Options:
 CLI                ENV
 -host              CORE_HOST         Host of Core  Default: '127.0.0.1'
 -port              CORE_PORT         Port of Core  Default: '3000'
--id                CORE_LOG          Custom id of this device
--token             DEVICE_ID         Custom token of this device
--log               DEVICE_TOKEN      File path to output log to (if not set, logs are sent to console)
+-log               CORE_LOG          File path to output log to (if not set, logs are sent to console)
+-id                DEVICE_ID         Custom id of this device
+-token             DEVICE_TOKEN      Custom token of this device
 -disableWatchdog   DISABLE_WATCHDOG  Disable the watchdog (Killing the process if no commands are received after some time)
 -certificates      CERTIFICATES      Provide paths to SSL certificates, (for self-signed certificates). '-certificates path1 path2 path3'
 -unsafeSSL         UNSAFE_SSL        Will cause the Node applocation to blindly accept all certificates. Not recommenced unless in local, controlled networks.
