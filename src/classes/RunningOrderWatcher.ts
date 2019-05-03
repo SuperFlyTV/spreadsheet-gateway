@@ -12,16 +12,13 @@ import * as clone from 'clone'
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
 
-	// public on: ('runningOrder_delete', () => void) => void
-	// on: (event: 'runningOrder_delete', listener: (runningOrderId: string) => void) => this;
-
 	on: ((event: 'info', listener: (message: string) => void) => this) &
 		((event: 'error', listener: (error: any, stack?: any) => void) => this) &
 		((event: 'warning', listener: (message: string) => void) => this) &
 
-		((event: 'runningOrder_delete', listener: (runningOrderId: string) => void) => this) &
-		((event: 'runningOrder_create', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
-		((event: 'runningOrder_update', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
+		((event: 'rundown_delete', listener: (runningOrderId: string) => void) => this) &
+		((event: 'rundown_create', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
+		((event: 'rundown_update', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
 
 		((event: 'section_delete', listener: (runningOrderId: string, sectionId: string) => void) => this) &
 		((event: 'section_create', listener: (runningOrderId: string, sectionId: string, newSection: SheetSection) => void) => this) &
@@ -164,7 +161,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		// Check if runningOrders have changed:
 
 		if (!runningOrder && oldRunningOrder) {
-			this.emit('runningOrder_delete', runningOrderId)
+			this.emit('rundown_delete', runningOrderId)
 
 		} else if (runningOrder && !oldRunningOrder) {
 			this.emit('runningOrder_create', runningOrderId, runningOrder)

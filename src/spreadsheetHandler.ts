@@ -269,32 +269,32 @@ export class SpreadsheetHandler {
 						this._logger.error(warning)
 					})
 					// TODO - these event types should operate on the correct types and with better parameters
-					.on('runningOrder_delete', (runningOrderId) => {
-						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [runningOrderId]).catch(this._logger.error)
+					.on('rundown_delete', (rundownExternalId) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [rundownExternalId]).catch(this._logger.error)
 					})
-					.on('runningOrder_create', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [mutateRundown(runningOrder)]).catch(this._logger.error)
+					.on('rundown_create', (_rundownExternalId, rundown) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
-					.on('runningOrder_update', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRundownUpdate, [mutateRundown(runningOrder)]).catch(this._logger.error)
+					.on('rundown_update', (_rundownExternalId, rundown) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownUpdate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
-					.on('section_delete', (runningOrderId, sectionId) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentDelete, [runningOrderId, sectionId]).catch(this._logger.error)
+					.on('section_delete', (rundownExternalId, sectionId) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentDelete, [rundownExternalId, sectionId]).catch(this._logger.error)
 					})
-					.on('section_create', (runningOrderId, sectionId, newSection) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentCreate, [runningOrderId, mutateSegment(newSection)]).catch(this._logger.error)
+					.on('section_create', (rundownExternalId, _sectionId, newSection) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)]).catch(this._logger.error)
 					})
-					.on('section_update', (runningOrderId, sectionId, newSection) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentUpdate, [runningOrderId, mutateSegment(newSection)]).catch(this._logger.error)
+					.on('section_update', (rundownExternalId, _sectionId, newSection) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)]).catch(this._logger.error)
 					})
-					.on('story_delete', (runningOrderId, sectionId, storyId) => {
-						this._coreHandler.core.callMethod(P.methods.dataPartDelete, [runningOrderId, sectionId, storyId]).catch(this._logger.error)
+					.on('story_delete', (rundownExternalId, sectionId, storyId) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartDelete, [rundownExternalId, sectionId, storyId]).catch(this._logger.error)
 					})
-					.on('story_create', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataPartCreate, [runningOrderId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
+					.on('story_create', (rundownExternalId, sectionId, _storyId, newStory) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
-					.on('story_update', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [runningOrderId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
+					.on('story_update', (rundownExternalId, sectionId, _storyId, newStory) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
 
 					this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
