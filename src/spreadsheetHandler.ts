@@ -268,13 +268,13 @@ export class SpreadsheetHandler {
 						this._logger.error(warning)
 					})
 					.on('runningOrder_delete', (runningOrderId) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderDelete, [runningOrderId]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [runningOrderId]).catch(this._logger.error)
 					})
 					.on('runningOrder_create', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderCreate, [runningOrderId, runningOrder]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [runningOrderId, runningOrder]).catch(this._logger.error)
 					})
 					.on('runningOrder_update', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderUpdate, [runningOrderId, runningOrder]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataRundownUpdate, [runningOrderId, runningOrder]).catch(this._logger.error)
 					})
 					.on('section_delete', (runningOrderId, sectionId) => {
 						this._coreHandler.core.callMethod(P.methods.dataSegmentDelete, [runningOrderId, sectionId]).catch(this._logger.error)
@@ -286,13 +286,13 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.dataSegmentUpdate, [runningOrderId, sectionId, newSection]).catch(this._logger.error)
 					})
 					.on('story_delete', (runningOrderId, sectionId, storyId) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemDelete, [runningOrderId, sectionId, storyId]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataPartDelete, [runningOrderId, sectionId, storyId]).catch(this._logger.error)
 					})
 					.on('story_create', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemCreate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataPartCreate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
 					})
 					.on('story_update', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemUpdate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
+						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
 					})
 
 					this._logger.info(`Starting watch of folder "${settings.folderPath}"`)

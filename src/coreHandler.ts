@@ -114,7 +114,10 @@ export class CoreHandler {
 		.catch(e => this.logger.warn('Error when setting status:' + e))
 	}
 	getCoreConnectionOptions (deviceOptions: DeviceConfig, name: string): CoreOptions {
-		let credentials
+		let credentials: {
+			deviceId: string
+			deviceToken: string
+		}
 
 		if (deviceOptions.deviceId && deviceOptions.deviceToken) {
 			credentials = {
@@ -130,11 +133,16 @@ export class CoreHandler {
 		} else {
 			credentials = CoreConnection.getCredentials(name.replace(/ /g,''))
 		}
-		let options: CoreOptions = _.extend(credentials, {
+		let options: CoreOptions = {
+			...credentials,
+
+			deviceCategory: P.DeviceCategory.INGEST,
 			deviceType: P.DeviceType.SPREADSHEET,
+			deviceSubType: P.SUBTYPE_PROCESS,
+
 			deviceName: name,
 			watchDog: (this._coreConfig ? this._coreConfig.watchdog : true)
-		})
+		}
 		options.versions = this._getVersions()
 		return options
 	}
