@@ -62,7 +62,7 @@
   "license": "MIT",
   "dependencies": {
     "clone": "^2.1.2",
-    "googleapis": "^37.2.0",
+    "googleapis": "^40.0.0",
     "timeline-state-resolver-types": "2.1.0",
     "tv-automation-server-core-integration": "1.1.0",
     "tv-automation-sofie-blueprints-integration": "0.21.0",
