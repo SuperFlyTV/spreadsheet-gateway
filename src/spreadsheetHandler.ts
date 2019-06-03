@@ -345,7 +345,8 @@ export class SpreadsheetHandler {
 
 			const authUrl = this._currentOAuth2Client.generateAuthUrl({
 				access_type: 'offline',
-				scope: ACCESS_SCOPES
+				scope: ACCESS_SCOPES,
+				prompt: 'consent'
 			})
 
 			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.
