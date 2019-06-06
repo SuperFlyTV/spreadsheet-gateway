@@ -1,12 +1,12 @@
 import { EventEmitter } from 'events'
-import { SheetRunningOrder } from './RunningOrder'
+import { SheetRundown } from './Rundown'
 import { OAuth2Client } from 'googleapis-common'
 import { google, drive_v3 } from 'googleapis'
 import { SheetsManager } from './SheetManager'
 import { GaxiosResponse } from 'gaxios'
 import * as _ from 'underscore'
-import { SheetSection } from './Section'
-import { SheetStory } from './Story'
+import { SheetSegment } from './Segment'
+import { SheetPart } from './Part'
 import * as clone from 'clone'
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -17,22 +17,22 @@ export class RunningOrderWatcher extends EventEmitter {
 		((event: 'warning', listener: (message: string) => void) => this) &
 
 		((event: 'rundown_delete', listener: (runningOrderId: string) => void) => this) &
-		((event: 'rundown_create', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
-		((event: 'rundown_update', listener: (runningOrderId: string, runningOrder: SheetRunningOrder) => void) => this) &
+		((event: 'rundown_create', listener: (runningOrderId: string, runningOrder: SheetRundown) => void) => this) &
+		((event: 'rundown_update', listener: (runningOrderId: string, runningOrder: SheetRundown) => void) => this) &
 
-		((event: 'section_delete', listener: (runningOrderId: string, sectionId: string) => void) => this) &
-		((event: 'section_create', listener: (runningOrderId: string, sectionId: string, newSection: SheetSection) => void) => this) &
-		((event: 'section_update', listener: (runningOrderId: string, sectionId: string, newSection: SheetSection) => void) => this) &
+		((event: 'segment_delete', listener: (runningOrderId: string, sectionId: string) => void) => this) &
+		((event: 'segment_create', listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void) => this) &
+		((event: 'segment_update', listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void) => this) &
 
-		((event: 'story_delete', listener: (runningOrderId: string, sectionId: string, storyId: string) => void) => this) &
-		((event: 'story_create', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetStory) => void) => this) &
-		((event: 'story_update', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetStory) => void) => this)
+		((event: 'part_delete', listener: (runningOrderId: string, sectionId: string, storyId: string) => void) => this) &
+		((event: 'part_create', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void) => this) &
+		((event: 'part_update', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void) => this)
 
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
 	public pollIntervalSlow: number = 10 * 1000
 
-	private runningOrders: { [runningOrderId: string]: SheetRunningOrder } = {}
+	private runningOrders: { [runningOrderId: string]: SheetRundown } = {}
 
 	private fastInterval: NodeJS.Timer | undefined
 	private slowinterval: NodeJS.Timer | undefined
@@ -66,7 +66,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
 	 */
-	async checkRunningOrderById (runningOrderId: string): Promise<SheetRunningOrder> {
+	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
 		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
 
 		this.processUpdatedRunningOrder(runningOrder.id, runningOrder)
@@ -74,7 +74,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		return runningOrder
 	}
 
-	async checkDriveFolder (): Promise<SheetRunningOrder[]> {
+	async checkDriveFolder (): Promise<SheetRundown[]> {
 		if (!this.sheetFolderName) return []
 
 		const runningOrderIds = await this.sheetManager.getSheetsInDriveFolder(this.sheetFolderName)
@@ -89,7 +89,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param sheetFolderName Name of folder to add Running Orders from. Eg. "My Running Orders"
 	 */
-	async setDriveFolder (sheetFolderName: string): Promise<SheetRunningOrder[]> {
+	async setDriveFolder (sheetFolderName: string): Promise<SheetRundown[]> {
 		this.sheetFolderName = sheetFolderName
 		return this.checkDriveFolder()
 	}
@@ -154,65 +154,65 @@ export class RunningOrderWatcher extends EventEmitter {
 		this.stopWatcher()
 	}
 
-	private processUpdatedRunningOrder (runningOrderId: string, runningOrder: SheetRunningOrder | null) {
+	private processUpdatedRunningOrder (rundownId: string, rundown: SheetRundown | null) {
 
-		const oldRunningOrder = this.runningOrders[runningOrderId]
+		const oldRundown = this.runningOrders[rundownId]
 
 		// Check if runningOrders have changed:
 
-		if (!runningOrder && oldRunningOrder) {
-			this.emit('rundown_delete', runningOrderId)
+		if (!rundown && oldRundown) {
+			this.emit('rundown_delete', rundownId)
 
-		} else if (runningOrder && !oldRunningOrder) {
-			this.emit('runningOrder_create', runningOrderId, runningOrder)
-		} else if (runningOrder && oldRunningOrder) {
+		} else if (rundown && !oldRundown) {
+			this.emit('rundown_create', rundownId, rundown)
+		} else if (rundown && oldRundown) {
 
-			if (!_.isEqual(runningOrder.serialize(), oldRunningOrder.serialize())) {
+			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
 
-				console.log(runningOrder.serialize(), oldRunningOrder.serialize()) // debug
+				console.log(rundown.serialize()) // debug
 
-				this.emit('runningOrder_update', runningOrderId, runningOrder)
+				this.emit('rundown_update', rundownId, rundown)
 			} else {
-				const newRunningOrder: SheetRunningOrder = runningOrder
+				const newRundown: SheetRundown = rundown
 
 				// Go through the sections for changes:
 				_.uniq(
-					_.keys(oldRunningOrder.sections).concat(
-					_.keys(newRunningOrder.sections))
-				).forEach((sectionId: string) => {
+					_.keys(oldRundown.segments).concat(
+					_.keys(newRundown.segments))
+				).forEach((segmentId: string) => {
 
-					const oldSection: SheetSection = oldRunningOrder.sections[sectionId]
-					const newSection: SheetSection = runningOrder.sections[sectionId]
+					const oldSection: SheetSegment = oldRundown.segments[segmentId]
+					const newSection: SheetSegment = rundown.segments[segmentId]
 
 					if (!newSection && oldSection) {
-						this.emit('section_delete', runningOrderId, sectionId)
+						this.emit('segment_delete', rundownId, segmentId)
 					} else if (newSection && !oldSection) {
-						this.emit('section_create', runningOrderId, sectionId, newSection)
+						this.emit('segment_create', rundownId, segmentId, newSection)
 					} else if (newSection && oldSection) {
 
 						if (!_.isEqual(newSection.serialize(), oldSection.serialize())) {
 							console.log(newSection.serialize(), oldSection.serialize()) // debug
-							this.emit('section_update', runningOrderId, sectionId, newSection)
+							this.emit('segment_update', rundownId, segmentId, newSection)
 						} else {
 
 							// Go through the stories for changes:
 							_.uniq(
-								_.keys(oldSection.stories).concat(
-								_.keys(newSection.stories))
+								_.keys(oldSection.segments).concat(
+								_.keys(newSection.segments))
 							).forEach((storyId: string) => {
 
-								const oldStory: SheetStory = oldSection.stories[storyId]
-								const newStory: SheetStory = newSection.stories[storyId]
+								const oldStory: SheetPart = oldSection.segments[storyId]
+								const newStory: SheetPart = newSection.segments[storyId]
 
 								if (!newStory && oldStory) {
-									this.emit('story_delete', runningOrderId, sectionId, storyId)
+									this.emit('part_delete', rundownId, segmentId, storyId)
 								} else if (newStory && !oldStory) {
-									this.emit('story_create', runningOrderId, sectionId, storyId, newStory)
+									this.emit('part_create', rundownId, segmentId, storyId, newStory)
 								} else if (newStory && oldStory) {
 
 									if (!_.isEqual(newStory.serialize(), oldStory.serialize())) {
 										console.log(newStory.serialize(), oldStory.serialize()) // debug
-										this.emit('story_update', runningOrderId, sectionId, storyId, newStory)
+										this.emit('part_update', rundownId, segmentId, storyId, newStory)
 									} else {
 
 										// At this point, we've determined that there are no changes.
@@ -226,10 +226,10 @@ export class RunningOrderWatcher extends EventEmitter {
 			}
 		}
 		// Update the stored data:
-		if (runningOrder) {
-			this.runningOrders[runningOrderId] = clone(runningOrder)
+		if (rundown) {
+			this.runningOrders[rundownId] = clone(rundown)
 		} else {
-			delete this.runningOrders[runningOrderId]
+			delete this.runningOrders[rundownId]
 		}
 	}
 

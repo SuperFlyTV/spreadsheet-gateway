@@ -1,7 +1,7 @@
 import { v4 as uuidV4 } from 'uuid'
-import { SheetSection } from './Section'
-import { SheetStory } from './Story'
-import { SheetItem } from './Item'
+import { SheetSegment } from './Segment'
+import { SheetPart } from './Part'
+import { SheetPiece } from './Piece'
 import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
 
@@ -32,14 +32,14 @@ interface ParsedRow {
 	}
 }
 
-export interface RunningOrder {
+export interface Rundown {
 	id: string
 	name: string // namnet på sheeten
 	expectedStart: number // unix time
 	expectedEnd: number // unix time
 }
 
-export class SheetRunningOrder implements RunningOrder {
+export class SheetRundown implements Rundown {
 	// id: string
 	// name: string // namnet på sheeten
 	// expectedStart: number // unix time
@@ -50,10 +50,10 @@ export class SheetRunningOrder implements RunningOrder {
 		public name: string,
 		public expectedStart: number,
 		public expectedEnd: number,
-		public sections: { [sectionId: string]: SheetSection } = {}
+		public segments: { [segmentId: string]: SheetSegment } = {}
 	) {}
 
-	serialize (): RunningOrder {
+	serialize (): Rundown {
 		return {
 			id:				this.id,
 			name:			this.name,
@@ -61,14 +61,14 @@ export class SheetRunningOrder implements RunningOrder {
 			expectedEnd:	this.expectedEnd
 		}
 	}
-	addSections (sections: SheetSection[]) {
-		sections.forEach(section => this.sections[section.id] = section)
+	addSegments (segments: SheetSegment[]) {
+		segments.forEach(segment => this.segments[segment.id] = segment)
 	}
 
 	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
 		let metaRow = cells[0] || []
-		let runningOrderStartTime = metaRow[1]
-		let runningOrderEndTime = metaRow[3]
+		let rundownStartTime = metaRow[1]
+		let rundownEndTime = metaRow[3]
 		let tablesRow = cells[1] || []
 		let tablePositions: any = {}
 		let inverseTablePositions: {[key: number]: string} = {}
@@ -133,8 +133,8 @@ export class SheetRunningOrder implements RunningOrder {
 
 			}
 		}
-		let parsedStartTime = new Date(Date.parse(runningOrderStartTime)).getTime()
-		let parsedEndTime = new Date(Date.parse(runningOrderEndTime)).getTime()
+		let parsedStartTime = new Date(Date.parse(rundownStartTime)).getTime()
+		let parsedEndTime = new Date(Date.parse(rundownEndTime)).getTime()
 		return {
 			rows: parsedRows,
 			meta: {
@@ -155,11 +155,11 @@ export class SheetRunningOrder implements RunningOrder {
 		return letter
 	}
 
-	private static parsedRowsIntoSections (sheetId: string, parsedRows: ParsedRow[]): {sections: SheetSection[], sheetUpdates: SheetUpdate[]} {
-		let sections: SheetSection[] = []
+	private static parsedRowsIntoSegments (sheetId: string, parsedRows: ParsedRow[]): {segments: SheetSegment[], sheetUpdates: SheetUpdate[]} {
+		let segments: SheetSegment[] = []
 		const implicitId = 'implicitFirst'
-		let section = new SheetSection(sheetId,implicitId, 0,'Implicit First Section', false)
-		let story: SheetStory | undefined
+		let segment = new SheetSegment(sheetId,implicitId, 0,'Implicit First Section', false)
+		let part: SheetPart | undefined
 		let sheetUpdates: SheetUpdate[] = []
 
 		parsedRows.forEach(row => {
@@ -178,26 +178,26 @@ export class SheetRunningOrder implements RunningOrder {
 			}
 			switch (row.data.type) {
 				case 'SECTION':
-					if (story) {
-						section.addStory(story)
-						story = undefined
+					if (part) {
+						segment.addSegment(part)
+						part = undefined
 					}
-					if (!(section.id === implicitId && _.keys(section.stories).length === 0)) {
-						sections.push(section)
+					if (!(segment.id === implicitId && _.keys(segment.segments).length === 0)) {
+						segments.push(segment)
 					}
 
 					// TODO: if there is no ID we need to update the sheet.
-					section = new SheetSection(sheetId, id, sections.length, row.data.name || '', row.data.float === 'TRUE')
+					segment = new SheetSegment(sheetId, id, segments.length, row.data.name || '', row.data.float === 'TRUE')
 					break
 				case '':
 				case undefined:
 					// This is an item only, not a story even. Usually "graphics" or "video"
-					if (!story) {
+					if (!part) {
 						// Then what?!
 						currentSheetUpdate = undefined
 					} else {
 						if (row.data.objectType) {
-							story.addItem(new SheetItem(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
+							part.addPiece(new SheetPiece(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
 						} else {
 							currentSheetUpdate = undefined
 						}
@@ -209,15 +209,15 @@ export class SheetRunningOrder implements RunningOrder {
 					// break;
 				default:
 					// It is likely a story
-					if (story) {
+					if (part) {
 						// We already have a story. We should add it to the section.
-						section.addStory(story)
-						story = undefined
+						segment.addSegment(part)
+						part = undefined
 					}
-					story = new SheetStory(row.data.type, section.id, id, _.keys(section.stories).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+					part = new SheetPart(row.data.type, segment.id, id, _.keys(segment.segments).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
-						const firstItem = new SheetItem(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
-						story.addItem(firstItem)
+						const firstItem = new SheetPiece(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
+						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
 					// TODO: figure out how to deal with object-time
@@ -231,11 +231,11 @@ export class SheetRunningOrder implements RunningOrder {
 			}
 		})
 
-		if (story) {
-			section.addStory(story)
+		if (part) {
+			segment.addSegment(part)
 		}
-		sections.push(section)
-		return { sections, sheetUpdates }
+		segments.push(segment)
+		return { segments: segments, sheetUpdates }
 	}
 	/**
 	 * Data attributes
@@ -258,15 +258,15 @@ export class SheetRunningOrder implements RunningOrder {
 	  * @param cells Cells of the sheet
 	  * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
 	  */
-	static fromSheetCells (sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRunningOrder {
-		let parsedData = SheetRunningOrder.parseRawData(cells)
-		let runningOrder = new SheetRunningOrder(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)
-		let results = SheetRunningOrder.parsedRowsIntoSections(sheetId, parsedData.rows)
-		runningOrder.addSections(results.sections)
+	static fromSheetCells (sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRundown {
+		let parsedData = SheetRundown.parseRawData(cells)
+		let rundown = new SheetRundown(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)
+		let results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
+		rundown.addSegments(results.segments)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
 			sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates).catch(console.error)
 		}
-		return runningOrder
+		return rundown
 	}
 }

@@ -1,6 +1,6 @@
 import { google, sheets_v4 } from 'googleapis'
 import { OAuth2Client } from 'googleapis-common'
-import { SheetRunningOrder } from './RunningOrder'
+import { SheetRundown } from './Rundown'
 const sheets = google.sheets('v4')
 
 const SHEET_NAME = process.env.SHEET_NAME || 'Rundown'
@@ -32,11 +32,11 @@ export class SheetsManager {
 	 *
 	 * @param rundownSheetId Id of the google sheet containing the Running Order
 	 */
-	downloadRunningOrder (rundownSheetId: string): Promise<SheetRunningOrder> {
+	downloadRunningOrder (rundownSheetId: string): Promise<SheetRundown> {
 		return this.downloadSheet(rundownSheetId)
 		.then(data => {
 			const runningOrderTitle = data.meta.properties ? data.meta.properties.title || 'unknown' : 'unknown'
-			return SheetRunningOrder.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], this)
+			return SheetRundown.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], this)
 		})
 	}
 

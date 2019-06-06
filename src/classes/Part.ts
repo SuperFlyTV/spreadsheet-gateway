@@ -1,8 +1,8 @@
-import { Item, SheetItem } from './Item'
+import { Piece, SheetPiece } from './Piece'
 // import { hasChangeType } from './hasChangeType';
 
-export interface Story {
-	sectionId: string
+export interface Part {
+	segmentId: string
 	id: string // unique within the parent section
 	rank: number
 	name: string
@@ -11,37 +11,37 @@ export interface Story {
 	float: boolean
 	script: string
 
-	items: Item[]
+	pieces: Piece[]
 }
 
-export class SheetStory implements Story {
+export class SheetPart implements Part {
 
 	constructor (
 		public type: string,
-		public sectionId: string,
+		public segmentId: string,
 		public id: string, // unique within the parent section
 		public rank: number,
 		public name: string,
 		public float: boolean,
 		public script: string,
-		public items: SheetItem[] = []) { }
+		public pieces: SheetPiece[] = []) { }
 
 	serialize () {
 		return {
 			type: 				this.type,
-			sectionId: 			this.sectionId,
+			segmentId: 			this.segmentId,
 			id: 					this.id,
 			rank: 				this.rank,
 			name: 				this.name,
 			float: 				this.float,
 			script: 				this.script,
-			items: 				this.items
+			pieces: 				this.pieces
 		}
 	}
-	addItems (items: SheetItem[]) {
-		this.items = this.items.concat(items)
+	addPieces (piece: SheetPiece[]) {
+		this.pieces = this.pieces.concat(piece)
 	}
-	addItem (item: SheetItem) {
-		this.items.push(item)
+	addPiece (piece: SheetPiece) {
+		this.pieces.push(piece)
 	}
 }
