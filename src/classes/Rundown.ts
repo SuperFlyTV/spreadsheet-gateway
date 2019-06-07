@@ -162,6 +162,33 @@ export class SheetRundown implements Rundown {
 		let part: SheetPart | undefined
 		let sheetUpdates: SheetUpdate[] = []
 
+		function timeFromRawData (time: string | undefined): number {
+			if (time === undefined) {
+				return 0
+			}
+
+			let ml = 1000
+
+			let parts = time.split('.')
+
+			if (parts.length < 3) {
+				return 0
+			}
+
+			let millis: number = 0
+			let seconds: number = 0
+
+			if (parts[2].includes('.')) {
+				millis = Number(parts[2].split('.')[1])
+				seconds = Number(parts[2].split('.')[0])
+			} else {
+				millis = 0
+				seconds = Number(parts[2])
+			}
+
+			return millis + (seconds * ml) + (Number(parts[1]) * 60 * ml) + (Number(parts[0]) * 3600 * ml)
+		}
+
 		parsedRows.forEach(row => {
 			let id = row.data.id
 			let currentSheetUpdate: SheetUpdate | undefined
@@ -197,7 +224,7 @@ export class SheetRundown implements Rundown {
 						currentSheetUpdate = undefined
 					} else {
 						if (row.data.objectType) {
-							part.addPiece(new SheetPiece(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
+							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', row.data.attributes || {}, 'TBA'))
 						} else {
 							currentSheetUpdate = undefined
 						}
@@ -211,12 +238,12 @@ export class SheetRundown implements Rundown {
 					// It is likely a story
 					if (part) {
 						// We already have a story. We should add it to the section.
-						segment.addSegment(part)
+						segment.addPart(part)
 						part = undefined
 					}
-					part = new SheetPart(row.data.type, segment.id, id, _.keys(segment.segments).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+					part = new SheetPart(row.data.type, segment.externalId, id, _.keys(segment.parts).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
-						const firstItem = new SheetPiece(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
+						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', row.data.attributes || {}, 'TBA')
 						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
