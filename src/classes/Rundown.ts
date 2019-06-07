@@ -33,7 +33,7 @@ interface ParsedRow {
 }
 
 export interface Rundown {
-	id: string
+	externalId: string
 	name: string // namnet på sheeten
 	expectedStart: number // unix time
 	expectedEnd: number // unix time
@@ -46,29 +46,29 @@ export class SheetRundown implements Rundown {
 	// expectedEnd: number // unix time
 	// sections: Section[] = []
 	constructor (
-		public id: string,
+		public externalId: string,
 		public name: string,
 		public expectedStart: number,
 		public expectedEnd: number,
-		public segments: { [segmentId: string]: SheetSegment } = {}
+		public segments: SheetSegment[] = []
 	) {}
 
 	serialize (): Rundown {
 		return {
-			id:				this.id,
+			externalId:				this.externalId,
 			name:			this.name,
 			expectedStart:	this.expectedStart,
 			expectedEnd:	this.expectedEnd
 		}
 	}
 	addSegments (segments: SheetSegment[]) {
-		segments.forEach(segment => this.segments[segment.id] = segment)
+		segments.forEach(segment => this.segments.push(segment))
 	}
 
 	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
 		let metaRow = cells[0] || []
-		let rundownStartTime = metaRow[1]
-		let rundownEndTime = metaRow[3]
+		let rundownStartTime = metaRow[2]
+		let rundownEndTime = metaRow[4]
 		let tablesRow = cells[1] || []
 		let tablePositions: any = {}
 		let inverseTablePositions: {[key: number]: string} = {}
@@ -179,10 +179,10 @@ export class SheetRundown implements Rundown {
 			switch (row.data.type) {
 				case 'SECTION':
 					if (part) {
-						segment.addSegment(part)
+						segment.addPart(part)
 						part = undefined
 					}
-					if (!(segment.id === implicitId && _.keys(segment.segments).length === 0)) {
+					if (!(segment.externalId === implicitId && _.keys(segment.parts).length === 0)) {
 						segments.push(segment)
 					}
 
@@ -232,7 +232,7 @@ export class SheetRundown implements Rundown {
 		})
 
 		if (part) {
-			segment.addSegment(part)
+			segment.addPart(part)
 		}
 		segments.push(segment)
 		return { segments: segments, sheetUpdates }

@@ -69,7 +69,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
 		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
 
-		this.processUpdatedRunningOrder(runningOrder.id, runningOrder)
+		this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
 
 		return runningOrder
 	}
@@ -181,8 +181,8 @@ export class RunningOrderWatcher extends EventEmitter {
 					_.keys(newRundown.segments))
 				).forEach((segmentId: string) => {
 
-					const oldSection: SheetSegment = oldRundown.segments[segmentId]
-					const newSection: SheetSegment = rundown.segments[segmentId]
+					const oldSection: SheetSegment = oldRundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment // TODO: handle better
+					const newSection: SheetSegment = rundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment
 
 					if (!newSection && oldSection) {
 						this.emit('segment_delete', rundownId, segmentId)
@@ -197,12 +197,12 @@ export class RunningOrderWatcher extends EventEmitter {
 
 							// Go through the stories for changes:
 							_.uniq(
-								_.keys(oldSection.segments).concat(
-								_.keys(newSection.segments))
+								_.keys(oldSection.parts).concat(
+								_.keys(newSection.parts))
 							).forEach((storyId: string) => {
 
-								const oldStory: SheetPart = oldSection.segments[storyId]
-								const newStory: SheetPart = newSection.segments[storyId]
+								const oldStory: SheetPart = oldSection.parts.find(part => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
+								const newStory: SheetPart = newSection.parts.find(part => part.externalId === storyId) as SheetPart
 
 								if (!newStory && oldStory) {
 									this.emit('part_delete', rundownId, segmentId, storyId)
