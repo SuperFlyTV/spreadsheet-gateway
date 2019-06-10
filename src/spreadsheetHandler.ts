@@ -298,11 +298,14 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
 
-					this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
-					watcher.setDriveFolder(settings.folderPath)
-					.catch(e => {
-						console.log('Error in addSheetsFolderToWatch', e)
-					})
+					if (settings.folderPath) {
+						this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
+						watcher.setDriveFolder(settings.folderPath)
+						.then(() => this._coreHandler.setStatus(P.StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`]))
+						.catch(e => {
+							console.log('Error in addSheetsFolderToWatch', e)
+						})
+					}
 				}
 			}
 			return Promise.resolve()
