@@ -177,10 +177,9 @@ export class RunningOrderWatcher extends EventEmitter {
 
 				// Go through the sections for changes:
 				_.uniq(
-					_.keys(oldRundown.segments).concat(
-					_.keys(newRundown.segments))
+					oldRundown.segments.map(segment => segment.externalId).concat(
+					newRundown.segments.map(segment => segment.externalId))
 				).forEach((segmentId: string) => {
-
 					const oldSection: SheetSegment = oldRundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment // TODO: handle better
 					const newSection: SheetSegment = rundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment
 
@@ -197,8 +196,8 @@ export class RunningOrderWatcher extends EventEmitter {
 
 							// Go through the stories for changes:
 							_.uniq(
-								_.keys(oldSection.parts).concat(
-								_.keys(newSection.parts))
+								oldSection.parts.map(part => part.externalId).concat(
+								newSection.parts.map(part => part.externalId))
 							).forEach((storyId: string) => {
 
 								const oldStory: SheetPart = oldSection.parts.find(part => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
