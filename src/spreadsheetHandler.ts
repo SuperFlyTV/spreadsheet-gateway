@@ -273,7 +273,6 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [rundownExternalId]).catch(this._logger.error)
 					})
 					.on('rundown_create', (_rundownExternalId, rundown) => {
-						console.log(rundown)
 						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
 					.on('rundown_update', (_rundownExternalId, rundown) => {
