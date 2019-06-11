@@ -32,6 +32,13 @@ interface ParsedRow {
 	}
 }
 
+interface ShowTime {
+	hour: number
+	minute: number
+	second: number
+	millis: number
+}
+
 export interface Rundown {
 	externalId: string
 	name: string // namnet på sheeten
@@ -63,6 +70,65 @@ export class SheetRundown implements Rundown {
 	}
 	addSegments (segments: SheetSegment[]) {
 		segments.forEach(segment => this.segments.push(segment))
+	}
+
+	/**
+	 * Converts a 12/24 hour date string to a ShowTime
+	 * @param {string} timeString Time in the form `HH:MM:SS (AM|PM)`
+	 */
+	private static showTimeFromString (timeString: string): ShowTime {
+		let [time, mod] = timeString.split(' ')
+		let [hours, mins, seconds] = time.split(':')
+		let h: number
+		let m: number = Number(mins)
+		let s: number = Number(seconds)
+
+		if (hours === '12') {
+			hours = '00'
+		}
+
+		if (mod === 'PM') {
+			h = parseInt(hours, 10) + 12
+		} else {
+			h = parseInt(hours, 10)
+		}
+
+		let mil = 1000
+
+		return {
+			hour: h,
+			minute: m,
+			second: s,
+			millis: (s * mil) + (m * 60 * mil) + (h * 3600 * mil)
+		}
+	}
+
+	/**
+	 * Converts the start and end times to milliseconds
+	 * @param {string} startString Start time in the form `HH:MM:SS (AM|PM)`
+	 * @param {string} endString End time in the form `HH:MM:SS (AM|PM)`
+	 */
+	private static showTimesToMillis (startString: string, endString: string): [number, number] {
+		let startDay = new Date()
+		let endDay = new Date()
+
+		let startTime: ShowTime
+		let endTime: ShowTime
+
+		startTime = this.showTimeFromString(startString)
+		endTime = this.showTimeFromString(endString)
+
+		if (startTime.millis > endTime.millis) {
+			endDay.setDate(startDay.getDate() + 1)
+		}
+
+		// Assume the show is happening today
+		let targetStart = new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate(), startTime.hour, startTime.minute, startTime.second)
+		let targetEnd = new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate(), endTime.hour, endTime.minute, endTime.second)
+		return [
+			targetStart.getTime(),
+			targetEnd.getTime()
+		]
 	}
 
 	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
@@ -134,30 +200,7 @@ export class SheetRundown implements Rundown {
 			}
 		}
 
-		// Converts a 12 hour date string to a time in millis
-		function showTimeToDateTime (timestring: string): number {
-			let today = new Date()
-			let [time, mod] = timestring.split(' ')
-			let [hours, mins, seconds] = time.split(':')
-			let h: number
-
-			if (hours === '12') {
-				hours = '00'
-			}
-
-			if (mod === 'PM') {
-				h = parseInt(hours, 10) + 12
-			} else {
-				h = parseInt(hours, 10)
-			}
-
-			// Assume the show is happening today
-			let target = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, Number(mins), Number(seconds))
-			return target.getTime()
-		}
-
-		let parsedStartTime = showTimeToDateTime(rundownStartTime)
-		let parsedEndTime = showTimeToDateTime(rundownEndTime)
+		let [parsedStartTime, parsedEndTime] = this.showTimesToMillis(rundownStartTime, rundownEndTime)
 		return {
 			rows: parsedRows,
 			meta: {
