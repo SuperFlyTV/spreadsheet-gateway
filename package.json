@@ -38,7 +38,8 @@
     "release": "yarn reset && yarn test && yarn docs:publish && yarn changelog",
     "reset": "git clean -dfx && git reset --hard && yarn",
     "ci": "yarn test",
-    "validate:dependencies": "yarn audit",
+    "validate:dependencies": "yarn audit && yarn license-validate",
+    "license-validate": "node-license-validator -p -d --allow-licenses MIT BSD BSD-3-Clause BSD-2-Clause ISC Apache Apache-2.0 Unlicense --allow-packages cycle",
     "start": "node dist/index.js",
     "unlinkall": "yarn unlink tv-automation-server-core-integration && yarn --check-files"
   },
@@ -70,6 +71,9 @@
     "uuid": "^3.3.2",
     "winston": "^2.4.2"
   },
+  "resolutions": {
+    "typedoc/**/marked": "^0.6.2"
+  },
   "devDependencies": {
     "@types/clone": "^0.1.30",
     "@types/jest": "^24.0.11",
@@ -82,6 +86,7 @@
     "jest-haste-map": "^24.5.0",
     "jest-resolve": "^24.5.0",
     "mkdirp": "^0.5.1",
+    "node-license-validator": "^1.3.0",
     "npm-scripts-info": "^0.3.9",
     "open-cli": "^5.0.0",
     "standard-version": "^6.0.1",
