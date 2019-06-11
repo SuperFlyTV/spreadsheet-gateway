@@ -189,6 +189,14 @@ export class SheetRundown implements Rundown {
 			return millis + (seconds * ml) + (Number(parts[1]) * 60 * ml) + (Number(parts[0]) * 3600 * ml)
 		}
 
+		function isAdlib (time: string | undefined): boolean {
+			if (!time) {
+				return true
+			}
+
+			return false
+		}
+
 		parsedRows.forEach(row => {
 			let id = row.data.id
 			let currentSheetUpdate: SheetUpdate | undefined
@@ -224,7 +232,8 @@ export class SheetRundown implements Rundown {
 						currentSheetUpdate = undefined
 					} else {
 						if (row.data.objectType) {
-							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', row.data.attributes || {}, 'TBA'))
+							let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA'))
 						} else {
 							currentSheetUpdate = undefined
 						}
@@ -243,11 +252,11 @@ export class SheetRundown implements Rundown {
 					}
 					part = new SheetPart(row.data.type, segment.externalId, id, _.keys(segment.parts).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
-						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', row.data.attributes || {}, 'TBA')
+						let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA')
 						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
-					// TODO: figure out how to deal with object-time
 					break
 			}
 			if (currentSheetUpdate) {
