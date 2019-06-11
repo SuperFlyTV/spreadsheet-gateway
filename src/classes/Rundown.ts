@@ -133,8 +133,31 @@ export class SheetRundown implements Rundown {
 
 			}
 		}
-		let parsedStartTime = new Date(Date.parse(rundownStartTime)).getTime()
-		let parsedEndTime = new Date(Date.parse(rundownEndTime)).getTime()
+
+		// Converts a 12 hour date string to a time in millis
+		function showTimeToDateTime (timestring: string): number {
+			let today = new Date()
+			let [time, mod] = timestring.split(' ')
+			let [hours, mins, seconds] = time.split(':')
+			let h: number
+
+			if (hours === '12') {
+				hours = '00'
+			}
+
+			if (mod === 'PM') {
+				h = parseInt(hours, 10) + 12
+			} else {
+				h = parseInt(hours, 10)
+			}
+
+			// Assume the show is happening today
+			let target = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, Number(mins), Number(seconds))
+			return target.getTime()
+		}
+
+		let parsedStartTime = showTimeToDateTime(rundownStartTime)
+		let parsedEndTime = showTimeToDateTime(rundownEndTime)
 		return {
 			rows: parsedRows,
 			meta: {
@@ -277,8 +300,8 @@ export class SheetRundown implements Rundown {
 	 * Data attributes
 	 *
 	 * Row 1: Meta data about the running order;
-	 *  A2: Expected start
-	 *  A4: Expected end
+	 *  C1: Expected start
+	 *  E1: Expected end
 	 * Row 2: table names
 	 *  Should have one of each of id, name, type, float, script, objectType, objectTime, , duration, clipName, feedback
 	 *  Can have 0 to N of "attr: X" Where x can be any alphanumerical value eg. "attr: name"
