@@ -152,7 +152,7 @@ workflows:
       - Send Coverage:
           requires:
             - Check for vulnerabilities
-            - Test node-8
+            - Build and test (branch)
           filters:
             branches:
               only:
