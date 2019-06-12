@@ -2,12 +2,14 @@ import { EventEmitter } from 'events'
 import { SheetRundown } from './Rundown'
 import { OAuth2Client } from 'googleapis-common'
 import { google, drive_v3 } from 'googleapis'
-import { SheetsManager } from './SheetManager'
+import { SheetsManager, SheetUpdate } from './SheetManager'
 import { GaxiosResponse } from 'gaxios'
 import * as _ from 'underscore'
 import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import * as clone from 'clone'
+import { CoreHandler } from '../coreHandler'
+import { MediaDict } from './media';
 
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
@@ -41,15 +43,18 @@ export class RunningOrderWatcher extends EventEmitter {
 	private currentlyChecking: boolean = false
 	private sheetManager: SheetsManager
 	private pageToken?: string
+	private _lastMedia: MediaDict = {}
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
 	 * whenever a change occurs.
 	 *
 	 * @param authClient Google OAuth2Clint containing connection information
+	 * @param coreHandler Handler for Sofie Core
 	 * @param delayStart (Optional) Set to a falsy value to prevent the watcher to start watching immediately.
 	 */
 	constructor (
 		private authClient: OAuth2Client,
+		private coreHandler: CoreHandler,
 		delayStart?: boolean
 	) {
 		super()
@@ -95,6 +100,35 @@ export class RunningOrderWatcher extends EventEmitter {
 	}
 
 	/**
+	 * Adds all available media to all running orders.
+	 */
+	updateAvailableMedia () {
+		let newMedia = this.coreHandler.GetMedia()
+
+		if (_.isEqual(this._lastMedia, newMedia)) {
+			// No need to update
+			return
+		}
+		this._lastMedia = newMedia
+
+		// Create required updates
+		let updates: SheetUpdate[] = []
+		let cell = 2
+		for (let key in this._lastMedia) {
+			updates.push({
+				value: this._lastMedia[key],
+				cellPosition: `E${cell}`
+			})
+			cell++
+		}
+
+		// Update all running orders with media.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+	}
+
+	/**
 	 * Start the watcher
 	 */
 	startWatcher () {
@@ -131,6 +165,7 @@ export class RunningOrderWatcher extends EventEmitter {
 			})
 			.then(() => {
 				// console.log('slow check done')
+				this.updateAvailableMedia()
 				this.currentlyChecking = false
 			}).catch(console.error)
 

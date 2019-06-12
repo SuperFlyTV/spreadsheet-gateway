@@ -367,7 +367,7 @@ export class SheetRundown implements Rundown {
 		rundown.addSegments(results.segments)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
-			sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates).catch(console.error)
+			sheetManager.updateSheetWithSheetUpdates(sheetId, 'Rundown', results.sheetUpdates).catch(console.error)
 		}
 		return rundown
 	}

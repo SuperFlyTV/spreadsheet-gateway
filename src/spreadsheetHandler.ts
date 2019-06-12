@@ -255,7 +255,7 @@ export class SpreadsheetHandler {
 						this.spreadsheetWatcher.dispose()
 						delete this.spreadsheetWatcher
 					}
-					const watcher = new RunningOrderWatcher(authClient)
+					const watcher = new RunningOrderWatcher(authClient, this._coreHandler)
 					this.spreadsheetWatcher = watcher
 
 					watcher
