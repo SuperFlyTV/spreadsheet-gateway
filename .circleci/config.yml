@@ -86,26 +86,26 @@ jobs:
   #     - store_test_results:
   #         path: ./coverage/clover.xml
 
-  # Git Release:
-  #   <<: *defaults
-  #   steps:
-  #     - attach_workspace:
-  #         at: ~/project
-  #     - add_ssh_keys:
-  #         fingerprints:
-  #           - "ca:54:a9:03:b6:45:45:80:ca:b9:ee:1e:cb:22:1b:a3"
-  #     - run: yarn install
-  #     - run: mkdir -p ~/.ssh
-  #     - run:
-  #         name: Keyscan Github
-  #         command: ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-  #     - run: git config --global user.email "info@superfly.tv"
-  #     - run: git config --global user.name "superflytvab"
-  #     - run: yarn release
-  #     - run: git push --follow-tags origin HEAD
-  #     - persist_to_workspace:
-  #         root: .
-  #         paths: [.]
+  Git Release:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/project
+      - add_ssh_keys:
+          fingerprints:
+            - "ca:54:a9:03:b6:45:45:80:ca:b9:ee:1e:cb:22:1b:a3"
+      - run: yarn install
+      - run: mkdir -p ~/.ssh
+      - run:
+          name: Keyscan Github
+          command: ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+      - run: git config --global user.email "info@superfly.tv"
+      - run: git config --global user.name "superflytvab"
+      - run: yarn release
+      - run: git push --follow-tags origin HEAD
+      - persist_to_workspace:
+          root: .
+          paths: [.]
 
 workflows:
   version: 2
@@ -157,10 +157,10 @@ workflows:
       #       branches:
       #         only:
       #           - master
-      # - Git Release:
-      #     requires:
-      #       - Send Coverage
-      #     filters:
-      #       branches:
-      #         only:
-      #           - master
+      - Git Release:
+          requires:
+            - Send Coverage
+          filters:
+            branches:
+              only:
+                - master
