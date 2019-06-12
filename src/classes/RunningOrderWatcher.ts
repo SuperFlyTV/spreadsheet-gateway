@@ -9,7 +9,7 @@ import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler } from '../coreHandler'
-import { MediaDict } from './media';
+import { MediaDict } from './media'
 
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
@@ -115,9 +115,15 @@ export class RunningOrderWatcher extends EventEmitter {
 		let updates: SheetUpdate[] = []
 		let cell = 2
 		for (let key in this._lastMedia) {
+			// Media name.
 			updates.push({
-				value: this._lastMedia[key],
+				value: this._lastMedia[key].name,
 				cellPosition: `E${cell}`
+			})
+			// Media duration.
+			updates.push({
+				value: this._lastMedia[key].duration,
+				cellPosition: `F${cell}`
 			})
 			cell++
 		}

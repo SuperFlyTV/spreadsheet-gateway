@@ -308,8 +308,36 @@ export class CoreHandler {
 
 			// Add file path to list.
 			let file = media.findOne({ _id: id })
+			constructMediaObject(file)
+		}
+
+		// Formats the duration as HH:MM:SS
+		let formatDuration = (duration: number): string => {
+			let hours = Math.floor(duration / 3600)
+			duration -= hours * 3600
+			let minutes = Math.floor(duration / 60)
+			duration -= minutes * 60
+
+			return `${hours}:${minutes}:${duration}`
+		}
+
+		// Constructs a MediaInfo object from file information.
+		let constructMediaObject = (file: any) => {
 			if ('mediaPath' in file) {
-				this._mediaPaths[file._id] = file['mediaPath']
+				let duration = 0
+				let name = file['mediaPath']
+
+				if ('mediainfo' in file) {
+					duration = Number(file['mediainfo']['format']['duration']) || 0
+					duration = Math.round(duration)
+					name = file['mediainfo']['name']
+				}
+
+				this._mediaPaths[file._id] = {
+					name: name,
+					path: file['mediaPath'],
+					duration: formatDuration(duration)
+				}
 			}
 		}
 
@@ -337,9 +365,7 @@ export class CoreHandler {
 
 		// Add all media files to dictionary.
 		media.find({}).forEach(file => {
-			if ('mediaPath' in file) {
-				this._mediaPaths[file._id] = file['mediaPath']
-			}
+			constructMediaObject(file)
 		})
 	}
 	/**

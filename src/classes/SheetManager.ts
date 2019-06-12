@@ -6,7 +6,7 @@ const sheets = google.sheets('v4')
 const SHEET_NAME = process.env.SHEET_NAME || 'Rundown'
 
 export interface SheetUpdate {
-	value: string
+	value: string | number
 	cellPosition: string
 }
 
