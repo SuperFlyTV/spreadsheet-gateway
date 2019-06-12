@@ -70,21 +70,21 @@ jobs:
       - run: yarn install
       - run: yarn test
       - run: yarn build
-  # Send Coverage:
-  #   <<: *defaults
-  #   steps:
-  #     - attach_workspace:
-  #         at: ~/project
-  #     - run: yarn install
-  #     - run: yarn send-coverage
-  #     - store_artifacts:
-  #         path: ./coverage/clover.xml
-  #         prefix: tests
-  #     - store_artifacts:
-  #         path: coverage
-  #         prefix: coverage
-  #     - store_test_results:
-  #         path: ./coverage/clover.xml
+  Send Coverage:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/project
+      - run: yarn install
+      - run: yarn send-coverage
+      - store_artifacts:
+          path: ./coverage/clover.xml
+          prefix: tests
+      - store_artifacts:
+          path: coverage
+          prefix: coverage
+      - store_test_results:
+          path: ./coverage/clover.xml
 
   Git Release:
     <<: *defaults
@@ -149,14 +149,14 @@ workflows:
               ignore:
                 - master
                 - develop
-      # - Send Coverage:
-      #     requires:
-      #       - Check for vulnerabilities
-      #       - Test node-8
-      #     filters:
-      #       branches:
-      #         only:
-      #           - master
+      - Send Coverage:
+          requires:
+            - Check for vulnerabilities
+            - Test node-8
+          filters:
+            branches:
+              only:
+                - master
       - Git Release:
           requires:
             - Send Coverage
