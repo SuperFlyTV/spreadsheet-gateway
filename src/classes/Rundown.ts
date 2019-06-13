@@ -179,11 +179,11 @@ export class SheetRundown implements Rundown {
 						case undefined:
 							break
 						default:
-							if (attr.startsWith('attr: ')) {
+							if (attr.startsWith('attr')) {
 								if (!rowItem.data.attributes) {
 									rowItem.data.attributes = {}
 								}
-								rowItem.data.attributes[attr.slice(6)] = cell
+								rowItem.data.attributes[attr] = cell
 							}
 							break
 					}
