@@ -299,7 +299,7 @@ export class SheetRundown implements Rundown {
 					} else {
 						if (row.data.objectType) {
 							let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
-							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA'))
+							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA', row.data.script || ''))
 						} else {
 							currentSheetUpdate = undefined
 						}
