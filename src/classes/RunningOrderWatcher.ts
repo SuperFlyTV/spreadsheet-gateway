@@ -33,11 +33,13 @@ export class RunningOrderWatcher extends EventEmitter {
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
 	public pollIntervalSlow: number = 10 * 1000
+	public pollIntervalSuperSlow: number = (24 * 60 * 60) / 45 // Maximum of 50 updates per day - some headroom given.
 
 	private runningOrders: { [runningOrderId: string]: SheetRundown } = {}
 
 	private fastInterval: NodeJS.Timer | undefined
 	private slowinterval: NodeJS.Timer | undefined
+	private superslowinterval: NodeJS.Timer | undefined
 
 	private drive: drive_v3.Drive
 	private currentlyChecking: boolean = false
@@ -102,12 +104,12 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Adds all available media to all running orders.
 	 */
-	updateAvailableMedia () {
+	updateAvailableMedia (): Promise<void> {
 		let newMedia = this.coreHandler.GetMedia()
 
 		if (_.isEqual(this._lastMedia, newMedia)) {
 			// No need to update
-			return
+			return Promise.resolve()
 		}
 		this._lastMedia = newMedia
 
@@ -132,6 +134,8 @@ export class RunningOrderWatcher extends EventEmitter {
 		Object.keys(this.runningOrders).forEach(id => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
+
+		return Promise.resolve()
 	}
 
 	/**
@@ -171,11 +175,24 @@ export class RunningOrderWatcher extends EventEmitter {
 			})
 			.then(() => {
 				// console.log('slow check done')
-				this.updateAvailableMedia()
 				this.currentlyChecking = false
 			}).catch(console.error)
 
 		}, this.pollIntervalSlow)
+
+		this.superslowinterval = setInterval(() => {
+			if (this.currentlyChecking) {
+				return
+			}
+			this.currentlyChecking = true
+			this.updateAvailableMedia()
+			.catch(error => {
+				console.log('Something went wrong during super slow check', error, error.stack)
+			})
+			.then(() => {
+				this.currentlyChecking = false
+			}).catch(console.error)
+		}, this.pollIntervalSuperSlow)
 	}
 
 	/**
@@ -189,6 +206,10 @@ export class RunningOrderWatcher extends EventEmitter {
 		if (this.slowinterval) {
 			clearInterval(this.slowinterval)
 			this.slowinterval = undefined
+		}
+		if (this.superslowinterval) {
+			clearInterval(this.superslowinterval)
+			this.superslowinterval = undefined
 		}
 	}
 	dispose () {
