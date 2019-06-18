@@ -3,7 +3,7 @@ import { Piece, SheetPiece } from './Piece'
 
 export interface Part {
 	segmentId: string
-	id: string // unique within the parent section
+	externalId: string // unique within the parent section
 	rank: number
 	name: string
 	type: string //  Assume we want this
@@ -19,7 +19,7 @@ export class SheetPart implements Part {
 	constructor (
 		public type: string,
 		public segmentId: string,
-		public id: string, // unique within the parent section
+		public externalId: string, // unique within the parent section
 		public rank: number,
 		public name: string,
 		public float: boolean,
@@ -30,7 +30,7 @@ export class SheetPart implements Part {
 		return {
 			type: 				this.type,
 			segmentId: 			this.segmentId,
-			id: 					this.id,
+			id: 					this.externalId,
 			rank: 				this.rank,
 			name: 				this.name,
 			float: 				this.float,

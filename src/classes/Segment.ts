@@ -2,7 +2,7 @@ import { SheetPart } from './Part'
 // import { hasChangeType } from './hasChangeType';
 export interface Segment {
 	rundownId: string
-	id: string // unique within the parent runningOrder
+	externalId: string // unique within the parent runningOrder
 	rank: number
 	name: string
 	float: boolean
@@ -11,25 +11,25 @@ export interface Segment {
 export class SheetSegment implements Segment {
 	constructor (
 		public rundownId: string,
-		public id: string,
+		public externalId: string,
 		public rank: number,
 		public name: string,
 		public float: boolean,
-		public segments: { [ segmentId: string ]: SheetPart} = {}
+		public parts: SheetPart[] = []
 	) {}
 	serialize (): Segment {
 		return {
 			rundownId:		this.rundownId,
-			id:					this.id,
+			externalId:					this.externalId,
 			rank:				this.rank,
 			name:				this.name,
 			float:				this.float
 		}
 	}
-	addSegment (segment: SheetPart) {
-		this.segments[segment.id] = segment
+	addPart (part: SheetPart) {
+		this.parts.push(part)
 	}
-	addSegments (segments: SheetPart[]) {
-		segments.forEach(story => this.addSegment(story))
+	addParts (parts: SheetPart[]) {
+		parts.forEach(story => this.addPart(story))
 	}
 }

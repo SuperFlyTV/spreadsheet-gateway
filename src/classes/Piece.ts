@@ -22,6 +22,7 @@ export class SheetPiece implements Piece {
 		public attributes: {
 			[key: string]: string
 		},
-		public position: string
+		public position: string,
+		public script?: string
 	) { }
 }

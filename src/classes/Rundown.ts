@@ -32,8 +32,15 @@ interface ParsedRow {
 	}
 }
 
+interface ShowTime {
+	hour: number
+	minute: number
+	second: number
+	millis: number
+}
+
 export interface Rundown {
-	id: string
+	externalId: string
 	name: string // namnet på sheeten
 	expectedStart: number // unix time
 	expectedEnd: number // unix time
@@ -46,29 +53,88 @@ export class SheetRundown implements Rundown {
 	// expectedEnd: number // unix time
 	// sections: Section[] = []
 	constructor (
-		public id: string,
+		public externalId: string,
 		public name: string,
 		public expectedStart: number,
 		public expectedEnd: number,
-		public segments: { [segmentId: string]: SheetSegment } = {}
+		public segments: SheetSegment[] = []
 	) {}
 
 	serialize (): Rundown {
 		return {
-			id:				this.id,
+			externalId:				this.externalId,
 			name:			this.name,
 			expectedStart:	this.expectedStart,
 			expectedEnd:	this.expectedEnd
 		}
 	}
 	addSegments (segments: SheetSegment[]) {
-		segments.forEach(segment => this.segments[segment.id] = segment)
+		segments.forEach(segment => this.segments.push(segment))
+	}
+
+	/**
+	 * Converts a 12/24 hour date string to a ShowTime
+	 * @param {string} timeString Time in the form `HH:MM:SS (AM|PM)`
+	 */
+	private static showTimeFromString (timeString: string): ShowTime {
+		let [time, mod] = timeString.split(' ')
+		let [hours, mins, seconds] = time.split(':')
+		let h: number
+		let m: number = Number(mins)
+		let s: number = Number(seconds)
+
+		if (hours === '12') {
+			hours = '00'
+		}
+
+		if (mod === 'PM') {
+			h = parseInt(hours, 10) + 12
+		} else {
+			h = parseInt(hours, 10)
+		}
+
+		let mil = 1000
+
+		return {
+			hour: h,
+			minute: m,
+			second: s,
+			millis: (s * mil) + (m * 60 * mil) + (h * 3600 * mil)
+		}
+	}
+
+	/**
+	 * Converts the start and end times to milliseconds
+	 * @param {string} startString Start time in the form `HH:MM:SS (AM|PM)`
+	 * @param {string} endString End time in the form `HH:MM:SS (AM|PM)`
+	 */
+	private static showTimesToMillis (startString: string, endString: string): [number, number] {
+		let startDay = new Date()
+		let endDay = new Date()
+
+		let startTime: ShowTime
+		let endTime: ShowTime
+
+		startTime = this.showTimeFromString(startString)
+		endTime = this.showTimeFromString(endString)
+
+		if (startTime.millis > endTime.millis) {
+			endDay.setDate(startDay.getDate() + 1)
+		}
+
+		// Assume the show is happening today
+		let targetStart = new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate(), startTime.hour, startTime.minute, startTime.second)
+		let targetEnd = new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate(), endTime.hour, endTime.minute, endTime.second)
+		return [
+			targetStart.getTime(),
+			targetEnd.getTime()
+		]
 	}
 
 	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
 		let metaRow = cells[0] || []
-		let rundownStartTime = metaRow[1]
-		let rundownEndTime = metaRow[3]
+		let rundownStartTime = metaRow[2]
+		let rundownEndTime = metaRow[4]
 		let tablesRow = cells[1] || []
 		let tablePositions: any = {}
 		let inverseTablePositions: {[key: number]: string} = {}
@@ -113,11 +179,11 @@ export class SheetRundown implements Rundown {
 						case undefined:
 							break
 						default:
-							if (attr.startsWith('attr: ')) {
+							if (attr.startsWith('attr')) {
 								if (!rowItem.data.attributes) {
 									rowItem.data.attributes = {}
 								}
-								rowItem.data.attributes[attr.slice(6)] = cell
+								rowItem.data.attributes[attr] = cell
 							}
 							break
 					}
@@ -133,8 +199,8 @@ export class SheetRundown implements Rundown {
 
 			}
 		}
-		let parsedStartTime = new Date(Date.parse(rundownStartTime)).getTime()
-		let parsedEndTime = new Date(Date.parse(rundownEndTime)).getTime()
+
+		let [parsedStartTime, parsedEndTime] = this.showTimesToMillis(rundownStartTime, rundownEndTime)
 		return {
 			rows: parsedRows,
 			meta: {
@@ -162,6 +228,41 @@ export class SheetRundown implements Rundown {
 		let part: SheetPart | undefined
 		let sheetUpdates: SheetUpdate[] = []
 
+		function timeFromRawData (time: string | undefined): number {
+			if (time === undefined) {
+				return 0
+			}
+
+			let ml = 1000
+
+			let parts = time.split('.')
+
+			if (parts.length < 3) {
+				return 0
+			}
+
+			let millis: number = 0
+			let seconds: number = 0
+
+			if (parts[2].includes('.')) {
+				millis = Number(parts[2].split('.')[1])
+				seconds = Number(parts[2].split('.')[0])
+			} else {
+				millis = 0
+				seconds = Number(parts[2])
+			}
+
+			return millis + (seconds * ml) + (Number(parts[1]) * 60 * ml) + (Number(parts[0]) * 3600 * ml)
+		}
+
+		function isAdlib (time: string | undefined): boolean {
+			if (!time) {
+				return true
+			}
+
+			return false
+		}
+
 		parsedRows.forEach(row => {
 			let id = row.data.id
 			let currentSheetUpdate: SheetUpdate | undefined
@@ -179,10 +280,10 @@ export class SheetRundown implements Rundown {
 			switch (row.data.type) {
 				case 'SECTION':
 					if (part) {
-						segment.addSegment(part)
+						segment.addPart(part)
 						part = undefined
 					}
-					if (!(segment.id === implicitId && _.keys(segment.segments).length === 0)) {
+					if (!(segment.externalId === implicitId && _.keys(segment.parts).length === 0)) {
 						segments.push(segment)
 					}
 
@@ -197,7 +298,8 @@ export class SheetRundown implements Rundown {
 						currentSheetUpdate = undefined
 					} else {
 						if (row.data.objectType) {
-							part.addPiece(new SheetPiece(id, row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA'))
+							let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA', row.data.script || ''))
 						} else {
 							currentSheetUpdate = undefined
 						}
@@ -211,16 +313,16 @@ export class SheetRundown implements Rundown {
 					// It is likely a story
 					if (part) {
 						// We already have a story. We should add it to the section.
-						segment.addSegment(part)
+						segment.addPart(part)
 						part = undefined
 					}
-					part = new SheetPart(row.data.type, segment.id, id, _.keys(segment.segments).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+					part = new SheetPart(row.data.type, segment.externalId, id, _.keys(segment.parts).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
-						const firstItem = new SheetPiece(id + '_item', row.data.objectType, Number(row.data.objectTime) || 0, Number(row.data.duration) || 0, row.data.clipName || '', row.data.attributes || {}, 'TBA')
+						let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA')
 						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
-					// TODO: figure out how to deal with object-time
 					break
 			}
 			if (currentSheetUpdate) {
@@ -232,7 +334,7 @@ export class SheetRundown implements Rundown {
 		})
 
 		if (part) {
-			segment.addSegment(part)
+			segment.addPart(part)
 		}
 		segments.push(segment)
 		return { segments: segments, sheetUpdates }
@@ -241,8 +343,8 @@ export class SheetRundown implements Rundown {
 	 * Data attributes
 	 *
 	 * Row 1: Meta data about the running order;
-	 *  A2: Expected start
-	 *  A4: Expected end
+	 *  C1: Expected start
+	 *  E1: Expected end
 	 * Row 2: table names
 	 *  Should have one of each of id, name, type, float, script, objectType, objectTime, , duration, clipName, feedback
 	 *  Can have 0 to N of "attr: X" Where x can be any alphanumerical value eg. "attr: name"
@@ -265,7 +367,7 @@ export class SheetRundown implements Rundown {
 		rundown.addSegments(results.segments)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
-			sheetManager.updateSheetWithSheetUpdates(sheetId, results.sheetUpdates).catch(console.error)
+			sheetManager.updateSheetWithSheetUpdates(sheetId, 'Rundown', results.sheetUpdates).catch(console.error)
 		}
 		return rundown
 	}

@@ -255,7 +255,7 @@ export class SpreadsheetHandler {
 						this.spreadsheetWatcher.dispose()
 						delete this.spreadsheetWatcher
 					}
-					const watcher = new RunningOrderWatcher(authClient)
+					const watcher = new RunningOrderWatcher(authClient, this._coreHandler)
 					this.spreadsheetWatcher = watcher
 
 					watcher
@@ -273,7 +273,6 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [rundownExternalId]).catch(this._logger.error)
 					})
 					.on('rundown_create', (_rundownExternalId, rundown) => {
-						console.log(rundown)
 						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
 					.on('rundown_update', (_rundownExternalId, rundown) => {
@@ -298,11 +297,14 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
 
-					this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
-					watcher.setDriveFolder(settings.folderPath)
-					.catch(e => {
-						console.log('Error in addSheetsFolderToWatch', e)
-					})
+					if (settings.folderPath) {
+						this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
+						watcher.setDriveFolder(settings.folderPath)
+						.then(() => this._coreHandler.setStatus(P.StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`]))
+						.catch(e => {
+							console.log('Error in addSheetsFolderToWatch', e)
+						})
+					}
 				}
 			}
 			return Promise.resolve()

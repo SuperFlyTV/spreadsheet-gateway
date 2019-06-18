@@ -2,12 +2,14 @@ import { EventEmitter } from 'events'
 import { SheetRundown } from './Rundown'
 import { OAuth2Client } from 'googleapis-common'
 import { google, drive_v3 } from 'googleapis'
-import { SheetsManager } from './SheetManager'
+import { SheetsManager, SheetUpdate } from './SheetManager'
 import { GaxiosResponse } from 'gaxios'
 import * as _ from 'underscore'
 import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import * as clone from 'clone'
+import { CoreHandler } from '../coreHandler'
+import { MediaDict } from './media'
 
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
@@ -31,25 +33,30 @@ export class RunningOrderWatcher extends EventEmitter {
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
 	public pollIntervalSlow: number = 10 * 1000
+	public pollIntervalSuperSlow: number = (24 * 60 * 60) / 45 // Maximum of 50 updates per day - some headroom given.
 
 	private runningOrders: { [runningOrderId: string]: SheetRundown } = {}
 
 	private fastInterval: NodeJS.Timer | undefined
 	private slowinterval: NodeJS.Timer | undefined
+	private superslowinterval: NodeJS.Timer | undefined
 
 	private drive: drive_v3.Drive
 	private currentlyChecking: boolean = false
 	private sheetManager: SheetsManager
 	private pageToken?: string
+	private _lastMedia: MediaDict = {}
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
 	 * whenever a change occurs.
 	 *
 	 * @param authClient Google OAuth2Clint containing connection information
+	 * @param coreHandler Handler for Sofie Core
 	 * @param delayStart (Optional) Set to a falsy value to prevent the watcher to start watching immediately.
 	 */
 	constructor (
 		private authClient: OAuth2Client,
+		private coreHandler: CoreHandler,
 		delayStart?: boolean
 	) {
 		super()
@@ -69,7 +76,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
 		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
 
-		this.processUpdatedRunningOrder(runningOrder.id, runningOrder)
+		this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
 
 		return runningOrder
 	}
@@ -92,6 +99,43 @@ export class RunningOrderWatcher extends EventEmitter {
 	async setDriveFolder (sheetFolderName: string): Promise<SheetRundown[]> {
 		this.sheetFolderName = sheetFolderName
 		return this.checkDriveFolder()
+	}
+
+	/**
+	 * Adds all available media to all running orders.
+	 */
+	updateAvailableMedia (): Promise<void> {
+		let newMedia = this.coreHandler.GetMedia()
+
+		if (_.isEqual(this._lastMedia, newMedia)) {
+			// No need to update
+			return Promise.resolve()
+		}
+		this._lastMedia = newMedia
+
+		// Create required updates
+		let updates: SheetUpdate[] = []
+		let cell = 2
+		for (let key in this._lastMedia) {
+			// Media name.
+			updates.push({
+				value: this._lastMedia[key].name,
+				cellPosition: `E${cell}`
+			})
+			// Media duration.
+			updates.push({
+				value: this._lastMedia[key].duration,
+				cellPosition: `F${cell}`
+			})
+			cell++
+		}
+
+		// Update all running orders with media.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
 	}
 
 	/**
@@ -135,6 +179,20 @@ export class RunningOrderWatcher extends EventEmitter {
 			}).catch(console.error)
 
 		}, this.pollIntervalSlow)
+
+		this.superslowinterval = setInterval(() => {
+			if (this.currentlyChecking) {
+				return
+			}
+			this.currentlyChecking = true
+			this.updateAvailableMedia()
+			.catch(error => {
+				console.log('Something went wrong during super slow check', error, error.stack)
+			})
+			.then(() => {
+				this.currentlyChecking = false
+			}).catch(console.error)
+		}, this.pollIntervalSuperSlow)
 	}
 
 	/**
@@ -148,6 +206,10 @@ export class RunningOrderWatcher extends EventEmitter {
 		if (this.slowinterval) {
 			clearInterval(this.slowinterval)
 			this.slowinterval = undefined
+		}
+		if (this.superslowinterval) {
+			clearInterval(this.superslowinterval)
+			this.superslowinterval = undefined
 		}
 	}
 	dispose () {
@@ -177,12 +239,11 @@ export class RunningOrderWatcher extends EventEmitter {
 
 				// Go through the sections for changes:
 				_.uniq(
-					_.keys(oldRundown.segments).concat(
-					_.keys(newRundown.segments))
+					oldRundown.segments.map(segment => segment.externalId).concat(
+					newRundown.segments.map(segment => segment.externalId))
 				).forEach((segmentId: string) => {
-
-					const oldSection: SheetSegment = oldRundown.segments[segmentId]
-					const newSection: SheetSegment = rundown.segments[segmentId]
+					const oldSection: SheetSegment = oldRundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment // TODO: handle better
+					const newSection: SheetSegment = rundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment
 
 					if (!newSection && oldSection) {
 						this.emit('segment_delete', rundownId, segmentId)
@@ -197,12 +258,12 @@ export class RunningOrderWatcher extends EventEmitter {
 
 							// Go through the stories for changes:
 							_.uniq(
-								_.keys(oldSection.segments).concat(
-								_.keys(newSection.segments))
+								oldSection.parts.map(part => part.externalId).concat(
+								newSection.parts.map(part => part.externalId))
 							).forEach((storyId: string) => {
 
-								const oldStory: SheetPart = oldSection.segments[storyId]
-								const newStory: SheetPart = newSection.segments[storyId]
+								const oldStory: SheetPart = oldSection.parts.find(part => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
+								const newStory: SheetPart = newSection.parts.find(part => part.externalId === storyId) as SheetPart
 
 								if (!newStory && oldStory) {
 									this.emit('part_delete', rundownId, segmentId, storyId)
