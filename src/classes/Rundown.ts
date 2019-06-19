@@ -158,10 +158,11 @@ export class SheetRundown implements Rundown {
 						float: 'FALSE'
 					}
 				}
+				let index = 0
 				row.forEach((cell, columnNumber) => {
 					const attr = inverseTablePositions[columnNumber]
 					rowItem.meta.propColPosition[attr] = columnNumber
-					if (cell === undefined || cell === '') { return }
+					if (cell === undefined || cell === '') { index++; return }
 					switch (attr) {
 						case 'id':
 						case 'name':
@@ -179,14 +180,19 @@ export class SheetRundown implements Rundown {
 						case undefined:
 							break
 						default:
-							if (attr.startsWith('attr')) {
+							if (attr.match(/attr\d/i)) {
 								if (!rowItem.data.attributes) {
 									rowItem.data.attributes = {}
 								}
-								rowItem.data.attributes[attr] = cell
+								if (row[index - 1]) {
+									rowItem.data.attributes[String(row[index - 1]).toLowerCase()] = cell
+								} else {
+									rowItem.data.attributes[attr] = cell
+								}
 							}
 							break
 					}
+					index++
 				})
 
 				if (// Only add non-empty rows:
