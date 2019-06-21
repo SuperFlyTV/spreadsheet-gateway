@@ -154,7 +154,10 @@ export class SheetsManager {
 
 		let resultData = (fileList.data.files || [])
 		.filter(file => {
-			return file.id
+			if (file.name && file.name[0] !== '_') {
+				return file.id
+			}
+			return
 		})
 		.map(file => {
 			return file.id || ''
