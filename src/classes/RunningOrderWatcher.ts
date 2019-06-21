@@ -297,18 +297,21 @@ export class RunningOrderWatcher extends EventEmitter {
 	private async processChange (change: drive_v3.Schema$Change) {
 		const fileId = change.fileId
 		if (fileId) {
-			if (change.removed) {
-				// file was removed
-				console.log('Sheet was deleted', fileId)
+			let valid = await this.sheetManager.checkSheetIsValid(fileId)
+			if (valid) {
+				if (change.removed) {
+					// file was removed
+					console.log('Sheet was deleted', fileId)
 
-				this.processUpdatedRunningOrder(fileId, null)
-			} else {
+					this.processUpdatedRunningOrder(fileId, null)
+				} else {
 
-				// file was updated
-				console.log('Sheet was updated', fileId)
-				const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
+					// file was updated
+					console.log('Sheet was updated', fileId)
+					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
 
-				this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					this.processUpdatedRunningOrder(fileId, newRunningOrder)
+				}
 			}
 		}
 	}
@@ -329,6 +332,7 @@ export class RunningOrderWatcher extends EventEmitter {
 
 		while (pageToken) {
 			const listData: GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
+				restrictToMyDrive: true,
 				pageToken: pageToken,
 				fields: '*'
 			})

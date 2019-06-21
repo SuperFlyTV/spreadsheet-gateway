@@ -172,4 +172,25 @@ export class SheetsManager {
 		}
 
 	}
+
+	/**
+	 * Checks if a sheet contains the 'Rundown' range.
+	 * @param {string} sheetid Id of the sheet to check.
+	 */
+	async checkSheetIsValid (sheetid: string): Promise<boolean> {
+		const spreadsheet = await sheets.spreadsheets.get({
+			spreadsheetId: sheetid,
+			auth: this.auth
+		})
+
+		if (spreadsheet.data) {
+			if (spreadsheet.data.sheets) {
+				if (SHEET_NAME in spreadsheet.data.sheets) {
+					return Promise.resolve(true)
+				}
+			}
+		}
+
+		return Promise.resolve(false)
+	}
 }
