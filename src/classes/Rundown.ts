@@ -239,6 +239,8 @@ export class SheetRundown implements Rundown {
 				return 0
 			}
 
+			time = time.replace(/:/g, '.')
+
 			let ml = 1000
 
 			let parts = time.split('.')
