@@ -243,24 +243,25 @@ export class SheetRundown implements Rundown {
 
 			let ml = 1000
 
-			let parts = time.split('.')
+			let parts = time.split('.').reverse()
 
-			if (parts.length < 3) {
-				return 0
+			let multipliers: number[] = [ml, ml * 60, ml * 3600]
+			let duration = 0
+
+			for (let i = 0; i < multipliers.length; i++) {
+				if (i === 0) {
+					if (parts[i].includes('.')) {
+						duration += Number(parts[i].split('.')[1])
+						duration += Number(parts[i].split('.')[0]) * multipliers[i]
+					} else {
+						duration += Number(parts[i]) * multipliers[i]
+					}
+				} else {
+					duration += Number(parts[i]) * multipliers[i]
+				}
 			}
 
-			let millis: number = 0
-			let seconds: number = 0
-
-			if (parts[2].includes('.')) {
-				millis = Number(parts[2].split('.')[1])
-				seconds = Number(parts[2].split('.')[0])
-			} else {
-				millis = 0
-				seconds = Number(parts[2])
-			}
-
-			return millis + (seconds * ml) + (Number(parts[1]) * 60 * ml) + (Number(parts[0]) * 3600 * ml)
+			return duration
 		}
 
 		function isAdlib (time: string | undefined): boolean {
