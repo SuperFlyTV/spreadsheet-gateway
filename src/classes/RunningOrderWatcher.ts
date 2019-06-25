@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events'
+import * as request from 'request-promise'
+import * as dotenv from 'dotenv'
 import { SheetRundown } from './Rundown'
 import { OAuth2Client } from 'googleapis-common'
 import { google, drive_v3 } from 'googleapis'
@@ -10,6 +12,7 @@ import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler } from '../coreHandler'
 import { MediaDict } from './media'
+dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
@@ -33,13 +36,13 @@ export class RunningOrderWatcher extends EventEmitter {
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
 	public pollIntervalSlow: number = 10 * 1000
-	public pollIntervalSuperSlow: number = (24 * 60 * 60) / 45 // Maximum of 50 updates per day - some headroom given.
+	public pollIntervalMedia: number = 5 * 1000
 
 	private runningOrders: { [runningOrderId: string]: SheetRundown } = {}
 
 	private fastInterval: NodeJS.Timer | undefined
 	private slowinterval: NodeJS.Timer | undefined
-	private superslowinterval: NodeJS.Timer | undefined
+	private mediaPollInterval: NodeJS.Timer | undefined
 
 	private drive: drive_v3.Drive
 	private currentlyChecking: boolean = false
@@ -61,6 +64,10 @@ export class RunningOrderWatcher extends EventEmitter {
 	) {
 		super()
 		this.drive = google.drive({ version: 'v3', auth: this.authClient })
+
+		if (!process.env.MEDIA_URL) {
+			this.pollIntervalMedia = (24 * 3600) / 45 // Use Google API to update, rate limit to 45 updates per day.
+		}
 
 		this.sheetManager = new SheetsManager(this.authClient)
 		if (!delayStart) {
@@ -101,18 +108,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		return this.checkDriveFolder()
 	}
 
-	/**
-	 * Adds all available media to all running orders.
-	 */
-	updateAvailableMedia (): Promise<void> {
-		let newMedia = this.coreHandler.GetMedia()
-
-		if (_.isEqual(this._lastMedia, newMedia)) {
-			// No need to update
-			return Promise.resolve()
-		}
-		this._lastMedia = newMedia
-
+	sendMediaViaGAPI (): Promise<void> {
 		// Create required updates
 		let updates: SheetUpdate[] = []
 		let cell = 2
@@ -136,6 +132,68 @@ export class RunningOrderWatcher extends EventEmitter {
 		})
 
 		return Promise.resolve()
+	}
+
+	/**
+	 * Sends available media as CSV to a URL specified in .env
+	 */
+	sendMediaAsCSV (): Promise<void> {
+		// Create required updates
+		let updates: { name: string, duration: string }[] = []
+		for (let key in this._lastMedia) {
+			updates.push({
+				name: this._lastMedia[key].name,
+				duration: this._lastMedia[key].duration
+			})
+		}
+
+		// Convert the media list to xml.
+		function convertToCSV (updates: {name: string, duration: string}[]) {
+			let output = ''
+			updates.forEach(update => {
+				output += `${update.name},${update.duration}\n`
+			})
+			output = output.substring(0, output.length - 1)
+			return output
+		}
+
+		if (process.env.MEDIA_URL) {
+			let req = request.post(process.env.MEDIA_URL, function (err) {
+				if (err) {
+					console.log(err)
+				}
+			})
+			let form = req.form()
+			form.append('file', convertToCSV(updates), {
+				filename: 'media.csv',
+				contentType: 'text/plain'
+			})
+		}
+
+		return Promise.resolve()
+	}
+
+	/**
+	 * Adds all available media to all running orders.
+	 */
+	updateAvailableMedia (): Promise<void> {
+		let newMedia = this.coreHandler.GetMedia()
+
+		if (_.isEqual(this._lastMedia, newMedia)) {
+			// No need to update
+			return Promise.resolve()
+		}
+		this._lastMedia = newMedia
+
+		if (process.env.MEDIA_URL) {
+			this.sendMediaAsCSV().catch(console.log)
+
+			return Promise.resolve()
+		} else {
+			this.sendMediaViaGAPI().catch(console.log)
+
+			return Promise.resolve()
+		}
 	}
 
 	/**
@@ -180,7 +238,7 @@ export class RunningOrderWatcher extends EventEmitter {
 
 		}, this.pollIntervalSlow)
 
-		this.superslowinterval = setInterval(() => {
+		this.mediaPollInterval = setInterval(() => {
 			if (this.currentlyChecking) {
 				return
 			}
@@ -192,7 +250,7 @@ export class RunningOrderWatcher extends EventEmitter {
 			.then(() => {
 				this.currentlyChecking = false
 			}).catch(console.error)
-		}, this.pollIntervalSuperSlow)
+		}, this.pollIntervalMedia)
 	}
 
 	/**
@@ -207,9 +265,9 @@ export class RunningOrderWatcher extends EventEmitter {
 			clearInterval(this.slowinterval)
 			this.slowinterval = undefined
 		}
-		if (this.superslowinterval) {
-			clearInterval(this.superslowinterval)
-			this.superslowinterval = undefined
+		if (this.mediaPollInterval) {
+			clearInterval(this.mediaPollInterval)
+			this.mediaPollInterval = undefined
 		}
 	}
 	dispose () {
@@ -297,18 +355,21 @@ export class RunningOrderWatcher extends EventEmitter {
 	private async processChange (change: drive_v3.Schema$Change) {
 		const fileId = change.fileId
 		if (fileId) {
-			if (change.removed) {
-				// file was removed
-				console.log('Sheet was deleted', fileId)
+			let valid = await this.sheetManager.checkSheetIsValid(fileId)
+			if (valid) {
+				if (change.removed) {
+					// file was removed
+					console.log('Sheet was deleted', fileId)
 
-				this.processUpdatedRunningOrder(fileId, null)
-			} else {
+					this.processUpdatedRunningOrder(fileId, null)
+				} else {
 
-				// file was updated
-				console.log('Sheet was updated', fileId)
-				const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
+					// file was updated
+					console.log('Sheet was updated', fileId)
+					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
 
-				this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					this.processUpdatedRunningOrder(fileId, newRunningOrder)
+				}
 			}
 		}
 	}
@@ -329,6 +390,7 @@ export class RunningOrderWatcher extends EventEmitter {
 
 		while (pageToken) {
 			const listData: GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
+				restrictToMyDrive: true,
 				pageToken: pageToken,
 				fields: '*'
 			})

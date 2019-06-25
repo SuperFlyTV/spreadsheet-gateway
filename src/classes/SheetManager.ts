@@ -2,6 +2,7 @@ import { google, sheets_v4 } from 'googleapis'
 import { OAuth2Client } from 'googleapis-common'
 import { SheetRundown } from './Rundown'
 const sheets = google.sheets('v4')
+const drive = google.drive('v3')
 
 const SHEET_NAME = process.env.SHEET_NAME || 'Rundown'
 
@@ -11,6 +12,7 @@ export interface SheetUpdate {
 }
 
 export class SheetsManager {
+	private currentFolder = ''
 
 	constructor (private auth: OAuth2Client) { }
 
@@ -145,6 +147,8 @@ export class SheetsManager {
 	async getSheetsInDriveFolderId (folderId: string, nextPageToken?: string): Promise<string[]> {
 		const drive = google.drive({ version: 'v3', auth: this.auth })
 
+		this.currentFolder = folderId
+
 		const fileList = await drive.files.list({
 			q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
 			spaces: 'drive',
@@ -154,7 +158,10 @@ export class SheetsManager {
 
 		let resultData = (fileList.data.files || [])
 		.filter(file => {
-			return file.id
+			if (file.name && file.name[0] !== '_') {
+				return file.id
+			}
+			return
 		})
 		.map(file => {
 			return file.id || ''
@@ -168,5 +175,41 @@ export class SheetsManager {
 			return resultData
 		}
 
+	}
+
+	/**
+	 * Checks if a sheet contains the 'Rundown' range.
+	 * @param {string} sheetid Id of the sheet to check.
+	 */
+	async checkSheetIsValid (sheetid: string): Promise<boolean> {
+		const spreadsheet = await sheets.spreadsheets.get({
+			spreadsheetId: sheetid,
+			auth: this.auth
+		})
+
+		const file = await drive.files.get({
+			fileId: sheetid,
+			fields: 'parents',
+			auth: this.auth
+		})
+
+		const folderId = this.currentFolder
+
+		if (spreadsheet.data && file.data) {
+			if (spreadsheet.data.sheets && file.data.parents) {
+				const sheets = spreadsheet.data.sheets.map(sheet => {
+					if (sheet.properties) {
+						return sheet.properties.title
+					}
+
+					return
+				})
+				if (sheets.indexOf(SHEET_NAME) !== -1 && file.data.parents.indexOf(folderId) !== -1) {
+					return Promise.resolve(true)
+				}
+			}
+		}
+
+		return Promise.resolve(false)
 	}
 }
