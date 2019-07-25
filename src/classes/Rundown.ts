@@ -78,7 +78,7 @@ export class SheetRundown implements Rundown {
 	 */
 	private static showTimeFromString (timeString: string): ShowTime {
 		let [time, mod] = timeString.split(' ')
-		let [hours, mins, seconds] = time.split(':')
+		let [hours, mins, seconds] = (time.includes('.')) ? time.split('.') : time.split(':')
 		let h: number
 		let m: number = Number(mins)
 		let s: number = Number(seconds)
