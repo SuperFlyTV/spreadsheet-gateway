@@ -10,7 +10,7 @@ import { Process } from './process'
 import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
-import { MediaDict } from './classes/media';
+import { MediaDict } from './classes/media'
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
 	_id: string
@@ -181,7 +181,7 @@ export class CoreHandler {
 				_id: this.core.deviceId
 			}),
 			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
-			this.core.autoSubscribe('peripheralDevices', this.core.deviceId),
+			this.core.autoSubscribe('peripheralDevices', this.core.deviceId)
 		])
 		.then((subs) => {
 			this._subscriptions = this._subscriptions.concat(subs)
