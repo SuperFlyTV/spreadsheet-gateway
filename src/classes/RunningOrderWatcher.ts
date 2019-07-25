@@ -60,6 +60,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	constructor (
 		private authClient: OAuth2Client,
 		private coreHandler: CoreHandler,
+		private gatewayVersion: string,
 		delayStart?: boolean
 	) {
 		super()
@@ -83,7 +84,9 @@ export class RunningOrderWatcher extends EventEmitter {
 	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
 		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
 
-		this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
+		if (runningOrder.gatewayVersion === this.gatewayVersion) {
+			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
+		}
 
 		return runningOrder
 	}
@@ -368,7 +371,9 @@ export class RunningOrderWatcher extends EventEmitter {
 					console.log('Sheet was updated', fileId)
 					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
 
-					this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					if (newRunningOrder.gatewayVersion === this.gatewayVersion) {
+						this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					}
 				}
 			}
 		}

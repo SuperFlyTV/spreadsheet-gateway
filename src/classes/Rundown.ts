@@ -6,6 +6,7 @@ import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
 
 interface RundownMetaData {
+	version: string
 	startTime: number
 	endTime: number
 }
@@ -55,6 +56,7 @@ export class SheetRundown implements Rundown {
 	constructor (
 		public externalId: string,
 		public name: string,
+		public gatewayVersion: string,
 		public expectedStart: number,
 		public expectedEnd: number,
 		public segments: SheetSegment[] = []
@@ -210,6 +212,7 @@ export class SheetRundown implements Rundown {
 		return {
 			rows: parsedRows,
 			meta: {
+				version: metaRow[0].replace(/blueprint gateway /i, ''),
 				startTime: parsedStartTime, // runningOrderStartTime,
 				endTime: parsedEndTime // runningOrderEndTime
 			}
@@ -371,6 +374,7 @@ export class SheetRundown implements Rundown {
 	 * Data attributes
 	 *
 	 * Row 1: Meta data about the running order;
+	 *  A1: Spreadsheet gateway version
 	 *  C1: Expected start
 	 *  E1: Expected end
 	 * Row 2: table names
@@ -390,7 +394,7 @@ export class SheetRundown implements Rundown {
 	  */
 	static fromSheetCells (sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRundown {
 		let parsedData = SheetRundown.parseRawData(cells)
-		let rundown = new SheetRundown(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)
+		let rundown = new SheetRundown(sheetId, name, parsedData.meta.version, parsedData.meta.startTime, parsedData.meta.endTime)
 		let results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
 		rundown.addSegments(results.segments)
 
