@@ -6,7 +6,7 @@ import { SheetRundown } from '../Rundown'
 describe('RunningOrders', () => {
 
 	it('should exist', () => {
-		let a = new SheetRundown('test', 'some name',1, 2)
+		let a = new SheetRundown('test', 'some name', 'v0.2', 1, 2)
 		expect(a).toBeTruthy()
 	})
 	// it('should correctly parse 2d cell array', () => {
