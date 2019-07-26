@@ -178,6 +178,13 @@ export class SheetRundown implements Rundown {
 						case 'feedback':
 							rowItem.data[attr] = cell
 							break
+						case 'screen':
+							if (!rowItem.data.attributes) {
+								rowItem.data.attributes = {}
+							}
+
+							rowItem.data.attributes['screen'] = cell
+							break
 						case '':
 						case undefined:
 							break
