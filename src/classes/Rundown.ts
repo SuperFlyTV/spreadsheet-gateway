@@ -239,16 +239,35 @@ export class SheetRundown implements Rundown {
 				return 0
 			}
 
-			time = time.replace(/:/g, '.')
+			time = time.replace('\n', '').replace(/\s/g, '')
+
+			let parts: string[] = []
+
+			if (time.match(/^(\d{1,2}){1,2}([\.:]\d{1,2}){0,2}$/)) {
+				if (time.indexOf(':') !== -1) {
+					parts = time.split(':')
+				} else {
+					parts = time.split('.')
+				}
+			} else if (time.match(/^(\d{1,2}){0,2}(\.\d{1,2}){0,2}(:(\d{1,3}))?$/)) {
+				if (time.indexOf(':') !== -1) {
+					let t = time.split(':')
+					time = t[0].replace('.', ':')
+					time += '.' + t[1]
+				}
+				parts = time.split(':')
+			} else {
+				return 0
+			}
+
+			parts = parts.reverse()
 
 			let ml = 1000
-
-			let parts = time.split('.').reverse()
 
 			let multipliers: number[] = [ml, ml * 60, ml * 3600]
 			let duration = 0
 
-			for (let i = 0; i < multipliers.length; i++) {
+			for (let i = 0; i < parts.length; i++) {
 				if (i === 0) {
 					if (parts[i].includes('.')) {
 						duration += Number(parts[i].split('.')[1])
