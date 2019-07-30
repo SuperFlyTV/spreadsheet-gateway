@@ -11,6 +11,7 @@ import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration';
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
 	_id: string
@@ -48,6 +49,7 @@ export class CoreHandler {
 	private _process?: Process
 	private _studioId: string
 	private _mediaPaths: MediaDict = {}
+	private _outputLayers: IOutputLayer[] = []
 
 	constructor (logger: Winston.LoggerInstance, deviceOptions: DeviceConfig) {
 		this.logger = logger
@@ -205,6 +207,21 @@ export class CoreHandler {
 		])
 		.then(() => {
 			this.setupObserverForMediaObjects()
+
+			return
+		})
+	}
+	/**
+	 * Subscribes to the 'showStyleBases' collection.
+	 * @param studioId The studio the showstyles belong to.
+	 */
+	setupSubscriptionForShowStyleBases (): Promise<void> {
+		return Promise.all([
+			this.core.autoSubscribe('showStyleBases', {}),
+			this.core.autoSubscribe('studios', {})
+		])
+		.then(() => {
+			this.setupObserverForShowStyleBases()
 
 			return
 		})
@@ -368,6 +385,50 @@ export class CoreHandler {
 			constructMediaObject(file)
 		})
 	}
+	setupObserverForShowStyleBases () {
+		let observerStyles = this.core.observe('showStyleBases')
+		this.killProcess(0)
+		this._observers.push(observerStyles)
+
+		let observerStudios = this.core.observe('studios')
+		this.killProcess(0)
+		this._observers.push(observerStudios)
+
+		let addedChanged = () => {
+			let showStyles = this.core.getCollection('showStyleBases')
+			if (!showStyles) throw Error('"showStyleBases" collection not found!')
+
+			let studios = this.core.getCollection('studios')
+			if (!studios) throw Error('"studios" collection not found!')
+
+			let studio = studios.findOne({ _id: this._studioId })
+			if (studio) {
+
+				this._outputLayers = []
+
+				showStyles.find({})
+				.forEach(style => {
+					if ((studio['supportedShowStyleBase'] as Array<string>).indexOf(style._id) !== 1) {
+						(style['outputLayers'] as IOutputLayer[]).forEach(layer => {
+							if (!layer.isPGM) {
+								this._outputLayers.push(layer)
+							}
+						})
+					}
+				})
+			}
+		}
+
+		observerStyles.added = () => addedChanged()
+		observerStyles.changed = () => addedChanged()
+		observerStyles.removed = () => addedChanged()
+
+		observerStudios.added = () => addedChanged()
+		observerStudios.changed = () => addedChanged()
+		observerStudios.removed = () => addedChanged()
+
+		addedChanged()
+	}
 	/**
 	 * Subscribes to changes to the device to get its associated studio ID.
 	 */
@@ -390,6 +451,10 @@ export class CoreHandler {
 
 					// Subscribe to mediaObjects collection.
 					this.setupSubscriptionForMediaObjects(this._studioId).catch(er => {
+						this.logger.error(er)
+					})
+
+					this.setupSubscriptionForShowStyleBases().catch(er => {
 						this.logger.error(er)
 					})
 				}
@@ -461,5 +526,9 @@ export class CoreHandler {
 	 */
 	public GetMedia (): MediaDict {
 		return this._mediaPaths
+	}
+
+	public GetOutputLayers (): Array<IOutputLayer> {
+		return this._outputLayers
 	}
 }

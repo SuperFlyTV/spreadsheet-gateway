@@ -12,6 +12,7 @@ import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler } from '../coreHandler'
 import { MediaDict } from './media'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -49,6 +50,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	private sheetManager: SheetsManager
 	private pageToken?: string
 	private _lastMedia: MediaDict = {}
+	private _lastOutputLayers: IOutputLayer[] = []
+	// private _lastOutputLayers: Array<ISourceLayer> = []
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
 	 * whenever a change occurs.
@@ -137,6 +140,32 @@ export class RunningOrderWatcher extends EventEmitter {
 		return Promise.resolve()
 	}
 
+	sendOutputLayersViaGAPI (): Promise<void> {
+		// Create reqrired updates
+		let updates: SheetUpdate[] = []
+
+		updates.push({
+			value: 'None',
+			cellPosition: `H2`
+		})
+
+		let cell = 3
+		for (let key in this._lastOutputLayers) {
+			updates.push({
+				value: this._lastOutputLayers[key].name,
+				cellPosition: `H${cell}`
+			})
+			cell++
+		}
+
+		// Update all running orders with outputLayers.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
+	}
+
 	/**
 	 * Sends available media as CSV to a URL specified in .env
 	 */
@@ -200,6 +229,22 @@ export class RunningOrderWatcher extends EventEmitter {
 	}
 
 	/**
+	 * Adds all all available outputs to all running orders.
+	 */
+	updateAvailableOutputs (): Promise<void> {
+		let outputLayers = this.coreHandler.GetOutputLayers()
+
+		if (_.isEqual(this._lastOutputLayers, outputLayers)) {
+			return Promise.resolve()
+		}
+		this._lastOutputLayers = outputLayers
+
+		this.sendOutputLayersViaGAPI().catch(console.log)
+
+		return Promise.resolve()
+	}
+
+	/**
 	 * Start the watcher
 	 */
 	startWatcher () {
@@ -248,11 +293,19 @@ export class RunningOrderWatcher extends EventEmitter {
 			this.currentlyChecking = true
 			this.updateAvailableMedia()
 			.catch(error => {
-				console.log('Something went wrong during super slow check', error, error.stack)
+				console.log('Something went wrong during siper slow check', error, error.stack)
 			})
 			.then(() => {
-				this.currentlyChecking = false
-			}).catch(console.error)
+				this.updateAvailableOutputs()
+				.catch(error => {
+					console.log('Something went wrong during super slow check', error, error.stack)
+				})
+				.then(() => {
+					this.currentlyChecking = false
+				})
+				.catch(console.error)
+			})
+			.catch(console.error)
 		}, this.pollIntervalMedia)
 	}
 
