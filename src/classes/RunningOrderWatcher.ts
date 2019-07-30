@@ -85,7 +85,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
 	 */
 	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
-		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
+		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId, this.coreHandler.GetOutputLayers())
 
 		if (runningOrder.gatewayVersion === this.gatewayVersion) {
 			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
@@ -422,7 +422,7 @@ export class RunningOrderWatcher extends EventEmitter {
 
 					// file was updated
 					console.log('Sheet was updated', fileId)
-					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
+					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId, this.coreHandler.GetOutputLayers())
 
 					if (newRunningOrder.gatewayVersion === this.gatewayVersion) {
 						this.processUpdatedRunningOrder(fileId, newRunningOrder)

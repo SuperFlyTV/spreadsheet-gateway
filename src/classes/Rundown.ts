@@ -4,6 +4,7 @@ import { SheetPart } from './Part'
 import { SheetPiece } from './Piece'
 import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 
 interface RundownMetaData {
 	version: string
@@ -133,7 +134,16 @@ export class SheetRundown implements Rundown {
 		]
 	}
 
-	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
+	private static getLayerByName (name: string, outputLayers: IOutputLayer[]): string {
+		let id = ''
+		outputLayers.forEach(layer => {
+			if (layer.name === name) id = layer._id
+		})
+
+		return id
+	}
+
+	private static parseRawData (cells: any[][], outputLayers: IOutputLayer[]): {rows: ParsedRow[], meta: RundownMetaData} {
 		let metaRow = cells[0] || []
 		let rundownStartTime = metaRow[2]
 		let rundownEndTime = metaRow[4]
@@ -183,7 +193,7 @@ export class SheetRundown implements Rundown {
 								rowItem.data.attributes = {}
 							}
 
-							rowItem.data.attributes['screen'] = cell
+							rowItem.data.attributes['screen'] = this.getLayerByName(cell, outputLayers)
 							break
 						case '':
 						case undefined:
@@ -399,8 +409,8 @@ export class SheetRundown implements Rundown {
 	  * @param cells Cells of the sheet
 	  * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
 	  */
-	static fromSheetCells (sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRundown {
-		let parsedData = SheetRundown.parseRawData(cells)
+	static fromSheetCells (sheetId: string, name: string, cells: any[][], outputLayers: IOutputLayer[], sheetManager?: SheetsManager): SheetRundown {
+		let parsedData = SheetRundown.parseRawData(cells, outputLayers)
 		let rundown = new SheetRundown(sheetId, name, parsedData.meta.version, parsedData.meta.startTime, parsedData.meta.endTime)
 		let results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
 		rundown.addSegments(results.segments)
