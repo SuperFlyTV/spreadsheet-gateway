@@ -11,7 +11,7 @@ import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
-import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration';
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
 	_id: string
