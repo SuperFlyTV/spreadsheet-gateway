@@ -186,13 +186,21 @@ export class SheetsManager {
 		const spreadsheet = await sheets.spreadsheets.get({
 			spreadsheetId: sheetid,
 			auth: this.auth
-		})
+		}).catch(console.error)
+
+		if (!spreadsheet) {
+			return Promise.resolve(false)
+		}
 
 		const file = await drive.files.get({
 			fileId: sheetid,
 			fields: 'parents',
 			auth: this.auth
-		})
+		}).catch(console.error)
+
+		if (!file) {
+			return Promise.resolve(false)
+		}
 
 		const folderId = this.currentFolder
 
