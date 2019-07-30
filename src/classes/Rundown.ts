@@ -4,8 +4,10 @@ import { SheetPart } from './Part'
 import { SheetPiece } from './Piece'
 import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 
 interface RundownMetaData {
+	version: string
 	startTime: number
 	endTime: number
 }
@@ -55,6 +57,7 @@ export class SheetRundown implements Rundown {
 	constructor (
 		public externalId: string,
 		public name: string,
+		public gatewayVersion: string,
 		public expectedStart: number,
 		public expectedEnd: number,
 		public segments: SheetSegment[] = []
@@ -131,7 +134,16 @@ export class SheetRundown implements Rundown {
 		]
 	}
 
-	private static parseRawData (cells: any[][]): {rows: ParsedRow[], meta: RundownMetaData} {
+	private static getLayerByName (name: string, outputLayers: IOutputLayer[]): string {
+		let id = ''
+		outputLayers.forEach(layer => {
+			if (layer.name === name) id = layer._id
+		})
+
+		return id
+	}
+
+	private static parseRawData (cells: any[][], outputLayers: IOutputLayer[]): {rows: ParsedRow[], meta: RundownMetaData} {
 		let metaRow = cells[0] || []
 		let rundownStartTime = metaRow[2]
 		let rundownEndTime = metaRow[4]
@@ -176,6 +188,13 @@ export class SheetRundown implements Rundown {
 						case 'feedback':
 							rowItem.data[attr] = cell
 							break
+						case 'screen':
+							if (!rowItem.data.attributes) {
+								rowItem.data.attributes = {}
+							}
+
+							rowItem.data.attributes['screen'] = this.getLayerByName(cell, outputLayers)
+							break
 						case '':
 						case undefined:
 							break
@@ -210,6 +229,7 @@ export class SheetRundown implements Rundown {
 		return {
 			rows: parsedRows,
 			meta: {
+				version: metaRow[0].replace(/blueprint gateway /i, ''),
 				startTime: parsedStartTime, // runningOrderStartTime,
 				endTime: parsedEndTime // runningOrderEndTime
 			}
@@ -371,6 +391,7 @@ export class SheetRundown implements Rundown {
 	 * Data attributes
 	 *
 	 * Row 1: Meta data about the running order;
+	 *  A1: Spreadsheet gateway version
 	 *  C1: Expected start
 	 *  E1: Expected end
 	 * Row 2: table names
@@ -388,9 +409,9 @@ export class SheetRundown implements Rundown {
 	  * @param cells Cells of the sheet
 	  * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
 	  */
-	static fromSheetCells (sheetId: string, name: string, cells: any[][], sheetManager?: SheetsManager): SheetRundown {
-		let parsedData = SheetRundown.parseRawData(cells)
-		let rundown = new SheetRundown(sheetId, name, parsedData.meta.startTime, parsedData.meta.endTime)
+	static fromSheetCells (sheetId: string, name: string, cells: any[][], outputLayers: IOutputLayer[], sheetManager?: SheetsManager): SheetRundown {
+		let parsedData = SheetRundown.parseRawData(cells, outputLayers)
+		let rundown = new SheetRundown(sheetId, name, parsedData.meta.version, parsedData.meta.startTime, parsedData.meta.endTime)
 		let results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
 		rundown.addSegments(results.segments)
 

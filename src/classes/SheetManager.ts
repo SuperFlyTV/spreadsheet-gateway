@@ -1,6 +1,7 @@
 import { google, sheets_v4 } from 'googleapis'
 import { OAuth2Client } from 'googleapis-common'
 import { SheetRundown } from './Rundown'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 const sheets = google.sheets('v4')
 const drive = google.drive('v3')
 
@@ -35,11 +36,11 @@ export class SheetsManager {
 	 *
 	 * @param rundownSheetId Id of the google sheet containing the Running Order
 	 */
-	downloadRunningOrder (rundownSheetId: string): Promise<SheetRundown> {
+	downloadRunningOrder (rundownSheetId: string, outputLayers: IOutputLayer[]): Promise<SheetRundown> {
 		return this.downloadSheet(rundownSheetId)
 		.then(data => {
 			const runningOrderTitle = data.meta.properties ? data.meta.properties.title || 'unknown' : 'unknown'
-			return SheetRundown.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], this)
+			return SheetRundown.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], outputLayers, this)
 		})
 	}
 

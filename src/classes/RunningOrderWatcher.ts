@@ -12,6 +12,7 @@ import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler } from '../coreHandler'
 import { MediaDict } from './media'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -49,6 +50,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	private sheetManager: SheetsManager
 	private pageToken?: string
 	private _lastMedia: MediaDict = {}
+	private _lastOutputLayers: IOutputLayer[] = []
+	// private _lastOutputLayers: Array<ISourceLayer> = []
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
 	 * whenever a change occurs.
@@ -60,6 +63,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	constructor (
 		private authClient: OAuth2Client,
 		private coreHandler: CoreHandler,
+		private gatewayVersion: string,
 		delayStart?: boolean
 	) {
 		super()
@@ -81,9 +85,11 @@ export class RunningOrderWatcher extends EventEmitter {
 	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
 	 */
 	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
-		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId)
+		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId, this.coreHandler.GetOutputLayers())
 
-		this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
+		if (runningOrder.gatewayVersion === this.gatewayVersion) {
+			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
+		}
 
 		return runningOrder
 	}
@@ -127,6 +133,32 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 
 		// Update all running orders with media.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
+	}
+
+	sendOutputLayersViaGAPI (): Promise<void> {
+		// Create reqrired updates
+		let updates: SheetUpdate[] = []
+
+		updates.push({
+			value: 'None',
+			cellPosition: `H2`
+		})
+
+		let cell = 3
+		for (let key in this._lastOutputLayers) {
+			updates.push({
+				value: this._lastOutputLayers[key].name,
+				cellPosition: `H${cell}`
+			})
+			cell++
+		}
+
+		// Update all running orders with outputLayers.
 		Object.keys(this.runningOrders).forEach(id => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
@@ -197,6 +229,22 @@ export class RunningOrderWatcher extends EventEmitter {
 	}
 
 	/**
+	 * Adds all all available outputs to all running orders.
+	 */
+	updateAvailableOutputs (): Promise<void> {
+		let outputLayers = this.coreHandler.GetOutputLayers()
+
+		if (_.isEqual(this._lastOutputLayers, outputLayers)) {
+			return Promise.resolve()
+		}
+		this._lastOutputLayers = outputLayers
+
+		this.sendOutputLayersViaGAPI().catch(console.log)
+
+		return Promise.resolve()
+	}
+
+	/**
 	 * Start the watcher
 	 */
 	startWatcher () {
@@ -245,11 +293,19 @@ export class RunningOrderWatcher extends EventEmitter {
 			this.currentlyChecking = true
 			this.updateAvailableMedia()
 			.catch(error => {
-				console.log('Something went wrong during super slow check', error, error.stack)
+				console.log('Something went wrong during siper slow check', error, error.stack)
 			})
 			.then(() => {
-				this.currentlyChecking = false
-			}).catch(console.error)
+				this.updateAvailableOutputs()
+				.catch(error => {
+					console.log('Something went wrong during super slow check', error, error.stack)
+				})
+				.then(() => {
+					this.currentlyChecking = false
+				})
+				.catch(console.error)
+			})
+			.catch(console.error)
 		}, this.pollIntervalMedia)
 	}
 
@@ -366,9 +422,11 @@ export class RunningOrderWatcher extends EventEmitter {
 
 					// file was updated
 					console.log('Sheet was updated', fileId)
-					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId)
+					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId, this.coreHandler.GetOutputLayers())
 
-					this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					if (newRunningOrder.gatewayVersion === this.gatewayVersion) {
+						this.processUpdatedRunningOrder(fileId, newRunningOrder)
+					}
 				}
 			}
 		}
