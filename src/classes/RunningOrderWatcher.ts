@@ -69,9 +69,9 @@ export class RunningOrderWatcher extends EventEmitter {
 		super()
 		this.drive = google.drive({ version: 'v3', auth: this.authClient })
 
-		if (!process.env.MEDIA_URL) {
+		/*if (!process.env.MEDIA_URL) {
 			this.pollIntervalMedia = (24 * 3600) / 45 // Use Google API to update, rate limit to 45 updates per day.
-		}
+		}*/
 
 		this.sheetManager = new SheetsManager(this.authClient)
 		if (!delayStart) {
