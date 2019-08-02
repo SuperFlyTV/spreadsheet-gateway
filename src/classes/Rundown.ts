@@ -30,6 +30,7 @@ interface ParsedRow {
 		duration?: string
 		clipName?: string
 		feedback?: string
+		transition?: string
 		attributes?: {[key: string]: string}
 	}
 }
@@ -186,6 +187,7 @@ export class SheetRundown implements Rundown {
 						case 'duration':
 						case 'clipName':
 						case 'feedback':
+						case 'transition':
 							rowItem.data[attr] = cell
 							break
 						case 'screen':
