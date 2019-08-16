@@ -337,7 +337,6 @@ export class SheetRundown implements Rundown {
 						segments.push(segment)
 					}
 
-					// TODO: if there is no ID we need to update the sheet.
 					segment = new SheetSegment(sheetId, id, segments.length, row.data.name || '', row.data.float === 'TRUE')
 					break
 				case '':
@@ -369,7 +368,7 @@ export class SheetRundown implements Rundown {
 					part = new SheetPart(row.data.type, segment.externalId, id, _.keys(segment.parts).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
 					if (row.data.objectType) {
 						let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
-						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, '', row.data.transition || '')
+						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA', '', row.data.transition || '')
 						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
