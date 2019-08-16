@@ -6,7 +6,9 @@ export interface Piece {
 	clipName: string
 	attributes: {
 		[key: string]: string
-	}
+	},
+	script?: string,
+	transition?: string
 }
 export interface SheetsPiece extends Piece {
 	position: string // A3:A9
@@ -23,6 +25,7 @@ export class SheetPiece implements Piece {
 			[key: string]: string
 		},
 		public position: string,
-		public script?: string
+		public script?: string,
+		public transition?: string
 	) { }
 }
