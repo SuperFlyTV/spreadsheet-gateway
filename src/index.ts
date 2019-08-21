@@ -51,7 +51,7 @@ process.argv.forEach((val) => {
 
 if (printHelp) {
 	console.log(`
-The Spreadsheet-gateway acts as a gateway between mos-devices and Core
+The Spreadsheet-gateway acts as a gateway between Google-sheets and Core
 Options:
 CLI                ENV
 -host              CORE_HOST         Host of Core  Default: '127.0.0.1'
