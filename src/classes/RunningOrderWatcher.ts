@@ -58,6 +58,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param authClient Google OAuth2Clint containing connection information
 	 * @param coreHandler Handler for Sofie Core
+	 * @param gatewayVersion Set version of gateway
 	 * @param delayStart (Optional) Set to a falsy value to prevent the watcher to start watching immediately.
 	 */
 	constructor (
