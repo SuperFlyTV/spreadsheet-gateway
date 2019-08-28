@@ -121,19 +121,11 @@ export class RunningOrderWatcher extends EventEmitter {
 		let updates: SheetUpdate[] = []
 		let cell = 2
 		for (let key in this._lastMedia) {
-			if (this.coreHandler.GetWorkflow() === 'VMIX') {
-				// Media name.
-				updates.push({
-					value: this._lastMedia[key].path,
-					cellPosition: `E${cell}`
-				})
-			} else {
-				// Media name.
-				updates.push({
-					value: this._lastMedia[key].name,
-					cellPosition: `E${cell}`
-				})
-			}
+			// Media name.
+			updates.push({
+				value: this._lastMedia[key].path,
+				cellPosition: `E${cell}`
+			})
 			// Media duration.
 			updates.push({
 				value: this._lastMedia[key].duration,
