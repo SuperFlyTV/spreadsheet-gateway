@@ -31,6 +31,7 @@ export interface CoreConfig {
 	port: number,
 	watchdog: boolean
 }
+export type WorkflowType = 'ATEM' | 'VMIX'
 /**
  * Represents a connection between mos-integration and Core
  */
@@ -50,6 +51,7 @@ export class CoreHandler {
 	private _studioId: string
 	private _mediaPaths: MediaDict = {}
 	private _outputLayers: IOutputLayer[] = []
+	private _workflow: WorkflowType
 
 	constructor (logger: Winston.LoggerInstance, deviceOptions: DeviceConfig) {
 		this.logger = logger
@@ -416,6 +418,17 @@ export class CoreHandler {
 						})
 					}
 				})
+
+				let settings = studio['config'] as Array<{_id: string, value: string | boolean}>
+				settings.forEach(setting => {
+					if (setting._id.match(/^vmix$/i)) {
+						if (setting.value === true) {
+							this._workflow = 'VMIX'
+						} else {
+							this._workflow = 'ATEM'
+						}
+					}
+				})
 			}
 		}
 
@@ -530,5 +543,9 @@ export class CoreHandler {
 
 	public GetOutputLayers (): Array<IOutputLayer> {
 		return this._outputLayers
+	}
+
+	public GetWorkflow (): WorkflowType {
+		return this._workflow
 	}
 }
