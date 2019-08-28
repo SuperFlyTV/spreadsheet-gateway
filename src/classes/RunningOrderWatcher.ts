@@ -401,6 +401,7 @@ export class RunningOrderWatcher extends EventEmitter {
 					.then(() => {
 						this.currentlyChecking = false
 					})
+					.catch(console.error)
 				})
 				.catch(console.error)
 			})
