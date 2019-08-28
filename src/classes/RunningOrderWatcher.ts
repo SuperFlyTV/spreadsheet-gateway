@@ -245,6 +245,71 @@ export class RunningOrderWatcher extends EventEmitter {
 		return Promise.resolve()
 	}
 
+	sendObjectTypesViaGAPI (): Promise<void> {
+		// Create reqrired updates
+		let updates: SheetUpdate[] = []
+		let cell = 2
+
+		let objs = [
+			'camera',
+			'video',
+			'graphic',
+			'split',
+			'overlay',
+			'lights',
+			'transition',
+			'remote',
+			'pip',
+			'voiceover',
+			'script'
+		]
+
+		objs.forEach(obj => {
+			updates.push({
+				value: obj,
+				cellPosition: `C${cell}`
+			})
+		})
+
+		// Update all running orders with outputLayers.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
+	}
+
+	sendTemplateTypesViaGAPI (): Promise<void> {
+		// Create reqrired updates
+		let updates: SheetUpdate[] = []
+		let cell = 2
+
+		let objs = [
+			'FULL',
+			'HEAD',
+			'CAM',
+			'DVE',
+			'SECTION',
+			'TITLES',
+			'BREAKER',
+			'PACKAGE'
+		]
+
+		objs.forEach(obj => {
+			updates.push({
+				value: obj,
+				cellPosition: `A${cell}`
+			})
+		})
+
+		// Update all running orders with outputLayers.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
+	}
+
 	/**
 	 * Sends available media as CSV to a URL specified in .env
 	 */
@@ -280,6 +345,16 @@ export class RunningOrderWatcher extends EventEmitter {
 				contentType: 'text/plain'
 			})
 		}
+
+		return Promise.resolve()
+	}
+
+	fillRundownData (): Promise<void> {
+		this.sendMediaViaGAPI().catch(console.log)
+		this.sendOutputLayersViaGAPI().catch(console.log)
+		this.sendTransitionsViaGAPI(this._lastWorkflow).catch(console.log)
+		this.sendObjectTypesViaGAPI().catch(console.log)
+		this.sendTemplateTypesViaGAPI().catch(console.log)
 
 		return Promise.resolve()
 	}
@@ -441,6 +516,7 @@ export class RunningOrderWatcher extends EventEmitter {
 
 		} else if (rundown && !oldRundown) {
 			this.emit('rundown_create', rundownId, rundown)
+			this.fillRundownData().catch(console.error)
 		} else if (rundown && oldRundown) {
 
 			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
