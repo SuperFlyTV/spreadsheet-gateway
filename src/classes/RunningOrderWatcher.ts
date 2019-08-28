@@ -10,7 +10,7 @@ import * as _ from 'underscore'
 import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import * as clone from 'clone'
-import { CoreHandler } from '../coreHandler'
+import { CoreHandler, WorkflowType } from '../coreHandler'
 import { MediaDict } from './media'
 import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
 dotenv.config()
@@ -51,6 +51,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	private pageToken?: string
 	private _lastMedia: MediaDict = {}
 	private _lastOutputLayers: IOutputLayer[] = []
+	private _lastWorkflow: WorkflowType
 	// private _lastOutputLayers: Array<ISourceLayer> = []
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
@@ -175,6 +176,75 @@ export class RunningOrderWatcher extends EventEmitter {
 		return Promise.resolve()
 	}
 
+	sendTransitionsViaGAPI (workflow: WorkflowType): Promise<void> {
+		// Create reqrired updates
+		let updates: SheetUpdate[] = []
+		let cell = 2
+
+		if (workflow === 'VMIX') {
+			[
+				'Cut',
+				'Fade',
+				'Zoom',
+				'Wipe',
+				'Slide',
+				'Fly',
+				'CrossZoom',
+				'FlyRotate',
+				'Cube',
+				'CubeZoom',
+				'VerticalWipe',
+				'VerticalSlide',
+				'Merge',
+				'WipeReverse',
+				'SlideReverse',
+				'VerticalWipeReverse',
+				'VerticalSlideReverse'
+			].forEach(transition => {
+				updates.push({
+					value: transition,
+					cellPosition: `J${cell}`
+				})
+				cell++
+			})
+
+			for (let i = cell; i < 20; i++) {
+				updates.push({
+					value: '',
+					cellPosition: `J${cell}`
+				})
+			}
+		} else {
+			[
+				'mix',
+				'cut',
+				'dip',
+				'sting',
+				'wipe'
+			].forEach(transition => {
+				updates.push({
+					value: transition,
+					cellPosition: `J${cell}`
+				})
+				cell++
+			})
+
+			for (let i = cell; i < 20; i++) {
+				updates.push({
+					value: '',
+					cellPosition: `J${cell}`
+				})
+			}
+		}
+
+		// Update all running orders with outputLayers.
+		Object.keys(this.runningOrders).forEach(id => {
+			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
+		})
+
+		return Promise.resolve()
+	}
+
 	/**
 	 * Sends available media as CSV to a URL specified in .env
 	 */
@@ -254,6 +324,20 @@ export class RunningOrderWatcher extends EventEmitter {
 	}
 
 	/**
+	 * Adds all available transitions to all running orders.
+	 */
+	updateAvailableTransitions (): Promise<void> {
+		let workflow = this.coreHandler.GetWorkflow()
+		if (this._lastWorkflow !== workflow) {
+			this._lastWorkflow = workflow
+
+			this.sendTransitionsViaGAPI(this._lastWorkflow).catch(console.log)
+		}
+
+		return Promise.resolve()
+	}
+
+	/**
 	 * Start the watcher
 	 */
 	startWatcher () {
@@ -310,7 +394,13 @@ export class RunningOrderWatcher extends EventEmitter {
 					console.log('Something went wrong during super slow check', error, error.stack)
 				})
 				.then(() => {
-					this.currentlyChecking = false
+					this.updateAvailableTransitions()
+					.catch(error => {
+						console.log('Something went wrong during super slow check', error, error.stack)
+					})
+					.then(() => {
+						this.currentlyChecking = false
+					})
 				})
 				.catch(console.error)
 			})
