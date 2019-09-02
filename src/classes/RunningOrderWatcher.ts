@@ -246,7 +246,6 @@ export class RunningOrderWatcher extends EventEmitter {
 			'camera',
 			'video',
 			'graphic',
-			'split',
 			'overlay',
 			'lights',
 			'transition',
@@ -255,6 +254,10 @@ export class RunningOrderWatcher extends EventEmitter {
 			'voiceover',
 			'script'
 		]
+
+		if (this.coreHandler.GetWorkflow() !== 'VMIX') {
+			objs.push('split')
+		}
 
 		objs.forEach(obj => {
 			updates.push({
