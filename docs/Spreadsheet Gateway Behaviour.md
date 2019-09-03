@@ -98,3 +98,7 @@ The BREAKER story type will WIPE  in and out. It supports videos and graphics.
 The DVE story type is used for PIP and other multi-source views. Only the first row of the DVE (where the DVE story type is set) defines the start time and duration. Setting the object type to pip means that exactly two rows of sources must be defined, with SPLIT, anyhwere between two and four sources can be defined. The sources will be automatically positioned according to the number of sources specified.
 
 Rows below the first row of the DVE support all object types. A row with the transition object type can be added to set the opening transition for the entire DVE object.
+
+### Note for vMix Users
+
+If you are using the vMix workflow, the DIP transition does not exist and is replaced with the FADE transition.
