@@ -12,6 +12,7 @@ import * as _ from 'underscore'
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
 import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
 	_id: string
@@ -148,7 +149,9 @@ export class CoreHandler {
 			deviceSubType: P.SUBTYPE_PROCESS,
 
 			deviceName: name,
-			watchDog: (this._coreConfig ? this._coreConfig.watchdog : true)
+			watchDog: (this._coreConfig ? this._coreConfig.watchdog : true),
+
+			configManifest: SPREADSHEET_DEVICE_CONFIG_MANIFEST
 		}
 		options.versions = this._getVersions()
 		return options
