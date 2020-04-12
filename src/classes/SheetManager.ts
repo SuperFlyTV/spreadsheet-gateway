@@ -159,7 +159,7 @@ export class SheetsManager {
 
 		let resultData = (fileList.data.files || [])
 		.filter(file => {
-			if (file.name && file.name[0] !== '_') {
+			if (file.name && file.name[0] !== '_' && !file.trashed) {
 				return file.id
 			}
 			return
