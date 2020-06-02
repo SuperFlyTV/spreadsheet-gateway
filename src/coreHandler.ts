@@ -10,6 +10,9 @@ import { Process } from './process'
 import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
+import { MediaDict } from './classes/media'
+import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
 	_id: string
@@ -29,6 +32,7 @@ export interface CoreConfig {
 	port: number,
 	watchdog: boolean
 }
+export type WorkflowType = 'ATEM' | 'VMIX'
 /**
  * Represents a connection between mos-integration and Core
  */
@@ -45,6 +49,10 @@ export class CoreHandler {
 	private _executedFunctions: {[id: string]: boolean} = {}
 	private _coreConfig?: CoreConfig
 	private _process?: Process
+	private _studioId: string
+	private _mediaPaths: MediaDict = {}
+	private _outputLayers: IOutputLayer[] = []
+	private _workflow: WorkflowType
 
 	constructor (logger: Winston.LoggerInstance, deviceOptions: DeviceConfig) {
 		this.logger = logger
@@ -114,7 +122,10 @@ export class CoreHandler {
 		.catch(e => this.logger.warn('Error when setting status:' + e))
 	}
 	getCoreConnectionOptions (deviceOptions: DeviceConfig, name: string): CoreOptions {
-		let credentials
+		let credentials: {
+			deviceId: string
+			deviceToken: string
+		}
 
 		if (deviceOptions.deviceId && deviceOptions.deviceToken) {
 			credentials = {
@@ -130,11 +141,18 @@ export class CoreHandler {
 		} else {
 			credentials = CoreConnection.getCredentials(name.replace(/ /g,''))
 		}
-		let options: CoreOptions = _.extend(credentials, {
+		let options: CoreOptions = {
+			...credentials,
+
+			deviceCategory: P.DeviceCategory.INGEST,
 			deviceType: P.DeviceType.SPREADSHEET,
+			deviceSubType: P.SUBTYPE_PROCESS,
+
 			deviceName: name,
-			watchDog: (this._coreConfig ? this._coreConfig.watchdog : true)
-		})
+			watchDog: (this._coreConfig ? this._coreConfig.watchdog : true),
+
+			configManifest: SPREADSHEET_DEVICE_CONFIG_MANIFEST
+		}
 		options.versions = this._getVersions()
 		return options
 	}
@@ -151,6 +169,9 @@ export class CoreHandler {
 	onConnected (fcn: () => any) {
 		this._onConnected = fcn
 	}
+	/**
+	 * Subscribes to events in the core.
+	 */
 	setupSubscriptionsAndObservers (): Promise<void> {
 		if (this._observers.length) {
 			this.logger.info('Core: Clearing observers..')
@@ -166,14 +187,46 @@ export class CoreHandler {
 			this.core.autoSubscribe('peripheralDevices', {
 				_id: this.core.deviceId
 			}),
-			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId)
+			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
+			this.core.autoSubscribe('peripheralDevices', this.core.deviceId)
 		])
 		.then((subs) => {
 			this._subscriptions = this._subscriptions.concat(subs)
 		})
 		.then(() => {
-
 			this.setupObserverForPeripheralDeviceCommands()
+			this.setupObserverForPeripheralDevices()
+
+			return
+		})
+	}
+
+	/**
+	 * Subscribes to the 'mediaObjects' collection.
+	 * @param studioId The studio the media objects belong to.
+	 */
+	setupSubscriptionForMediaObjects (studioId: string): Promise<void> {
+		return Promise.all([
+			// Media found by the media scanner.
+			this.core.autoSubscribe('mediaObjects', studioId, {})
+		])
+		.then(() => {
+			this.setupObserverForMediaObjects()
+
+			return
+		})
+	}
+	/**
+	 * Subscribes to the 'showStyleBases' collection.
+	 * @param studioId The studio the showstyles belong to.
+	 */
+	setupSubscriptionForShowStyleBases (): Promise<void> {
+		return Promise.all([
+			this.core.autoSubscribe('showStyleBases', {}),
+			this.core.autoSubscribe('studios', {})
+		])
+		.then(() => {
+			this.setupObserverForShowStyleBases()
 
 			return
 		})
@@ -221,10 +274,19 @@ export class CoreHandler {
 			throw new Error('doReceiveAuthToken not set!')
 		}
 	}
+
+	/**
+	 * Listen for commands and execute.
+	 */
 	setupObserverForPeripheralDeviceCommands () {
 		let observer = this.core.observe('peripheralDeviceCommands')
 		this.killProcess(0) // just make sure it exists
 		this._observers.push(observer)
+
+		/**
+		 * Called when a command is added/changed. Executes that command.
+		 * @param {string} id Command id to execute.
+		 */
 		let addedChangedCommand = (id: string) => {
 			let cmds = this.core.getCollection('peripheralDeviceCommands')
 			if (!cmds) throw Error('"peripheralDeviceCommands" collection not found!')
@@ -251,6 +313,180 @@ export class CoreHandler {
 				this.executeFunction(cmd, this)
 			}
 		})
+	}
+	/**
+	 * Subscribes to changes to media objects to populate spreadsheet data.
+	 */
+	setupObserverForMediaObjects () {
+		// Setup observer.
+		let observer = this.core.observe('mediaObjects')
+		this.killProcess(0)
+		this._observers.push(observer)
+
+		let addedChanged = (id: string) => {
+			// Check collection exists.
+			let media = this.core.getCollection('mediaObjects')
+			if (!media) throw Error('"mediaObjects" collection not found!')
+
+			// Add file path to list.
+			let file = media.findOne({ _id: id })
+			constructMediaObject(file)
+		}
+
+		// Formats the duration as HH:MM:SS
+		let formatDuration = (duration: number): string => {
+			let hours = Math.floor(duration / 3600)
+			duration -= hours * 3600
+			let minutes = Math.floor(duration / 60)
+			duration -= minutes * 60
+
+			return `${hours}:${minutes}:${duration}`
+		}
+
+		// Constructs a MediaInfo object from file information.
+		let constructMediaObject = (file: any) => {
+			if ('mediaPath' in file) {
+				let duration = 0
+				let name = file['mediaPath']
+
+				if ('mediainfo' in file) {
+					duration = Number(file['mediainfo']['format']['duration']) || 0
+					duration = Math.round(duration)
+					name = file['mediainfo']['name']
+				}
+
+				this._mediaPaths[file._id] = {
+					name: name,
+					path: file['mediaPath'],
+					duration: formatDuration(duration)
+				}
+			}
+		}
+
+		let removed = (id: string) => {
+			if (id in this._mediaPaths) {
+				delete this._mediaPaths[id]
+			}
+		}
+
+		observer.added = (id: string) => {
+			addedChanged(id)
+		}
+
+		observer.changed = (id: string) => {
+			addedChanged(id)
+		}
+
+		observer.removed = (id: string) => {
+			removed(id)
+		}
+
+		// Check collection exists.
+		let media = this.core.getCollection('mediaObjects')
+		if (!media) throw Error('"mediaObjects" collection not found!')
+
+		// Add all media files to dictionary.
+		media.find({}).forEach(file => {
+			constructMediaObject(file)
+		})
+	}
+	setupObserverForShowStyleBases () {
+		let observerStyles = this.core.observe('showStyleBases')
+		this.killProcess(0)
+		this._observers.push(observerStyles)
+
+		let observerStudios = this.core.observe('studios')
+		this.killProcess(0)
+		this._observers.push(observerStudios)
+
+		let addedChanged = () => {
+			let showStyles = this.core.getCollection('showStyleBases')
+			if (!showStyles) throw Error('"showStyleBases" collection not found!')
+
+			let studios = this.core.getCollection('studios')
+			if (!studios) throw Error('"studios" collection not found!')
+
+			let studio = studios.findOne({ _id: this._studioId })
+			if (studio) {
+
+				this._outputLayers = []
+
+				showStyles.find({})
+				.forEach(style => {
+					if ((studio['supportedShowStyleBase'] as Array<string>).indexOf(style._id) !== 1) {
+						(style['outputLayers'] as IOutputLayer[]).forEach(layer => {
+							if (!layer.isPGM) {
+								this._outputLayers.push(layer)
+							}
+						})
+					}
+				})
+
+				let settings = studio['config'] as Array<{_id: string, value: string | boolean}>
+				settings.forEach(setting => {
+					if (setting._id.match(/^vmix$/i)) {
+						if (setting.value === true) {
+							this._workflow = 'VMIX'
+						} else {
+							this._workflow = 'ATEM'
+						}
+					}
+				})
+			}
+		}
+
+		observerStyles.added = () => addedChanged()
+		observerStyles.changed = () => addedChanged()
+		observerStyles.removed = () => addedChanged()
+
+		observerStudios.added = () => addedChanged()
+		observerStudios.changed = () => addedChanged()
+		observerStudios.removed = () => addedChanged()
+
+		addedChanged()
+	}
+	/**
+	 * Subscribes to changes to the device to get its associated studio ID.
+	 */
+	setupObserverForPeripheralDevices () {
+		// Setup observer.
+		let observer = this.core.observe('peripheralDevices')
+		this.killProcess(0)
+		this._observers.push(observer)
+
+		let addedChanged = (id: string) => {
+			// Check that collection exists.
+			let devices = this.core.getCollection('peripheralDevices')
+			if (!devices) throw Error('"peripheralDevices" collection not found!')
+
+			// Find studio ID.
+			let dev = devices.findOne({ _id: id })
+			if ('studioId' in dev) {
+				if (dev['studioId'] !== this._studioId) {
+					this._studioId = dev['studioId']
+
+					// Subscribe to mediaObjects collection.
+					this.setupSubscriptionForMediaObjects(this._studioId).catch(er => {
+						this.logger.error(er)
+					})
+
+					this.setupSubscriptionForShowStyleBases().catch(er => {
+						this.logger.error(er)
+					})
+				}
+			} else {
+				throw Error('Could not get a studio for spreadsheet-gateway')
+			}
+		}
+
+		observer.added = (id: string) => {
+			addedChanged(id)
+		}
+		observer.changed = (id: string) => {
+			addedChanged(id)
+		}
+
+		addedChanged(this.core.deviceId)
 	}
 	killProcess (actually: number) {
 		if (actually === 1) {
@@ -299,5 +535,20 @@ export class CoreHandler {
 			this.logger.error(e)
 		}
 		return versions
+	}
+
+	/**
+	 * Returns the available media.
+	 */
+	public GetMedia (): MediaDict {
+		return this._mediaPaths
+	}
+
+	public GetOutputLayers (): Array<IOutputLayer> {
+		return this._outputLayers
+	}
+
+	public GetWorkflow (): WorkflowType {
+		return this._workflow
 	}
 }

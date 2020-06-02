@@ -9,6 +9,7 @@ import { OAuth2Client } from 'google-auth-library'
 
 import { CoreHandler } from './coreHandler'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
+import { mutateRundown, mutateSegment, mutatePart } from './mutate'
 
 export interface SpreadsheetConfig {
 	// Todo: add settings here?
@@ -254,7 +255,7 @@ export class SpreadsheetHandler {
 						this.spreadsheetWatcher.dispose()
 						delete this.spreadsheetWatcher
 					}
-					const watcher = new RunningOrderWatcher(authClient)
+					const watcher = new RunningOrderWatcher(authClient, this._coreHandler, 'v0.2')
 					this.spreadsheetWatcher = watcher
 
 					watcher
@@ -267,39 +268,43 @@ export class SpreadsheetHandler {
 					.on('warning', (warning: any) => {
 						this._logger.error(warning)
 					})
-					.on('runningOrder_delete', (runningOrderId) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderDelete, [runningOrderId]).catch(this._logger.error)
+					// TODO - these event types should operate on the correct types and with better parameters
+					.on('rundown_delete', (rundownExternalId) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [rundownExternalId]).catch(this._logger.error)
 					})
-					.on('runningOrder_create', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderCreate, [runningOrderId, runningOrder]).catch(this._logger.error)
+					.on('rundown_create', (_rundownExternalId, rundown) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
-					.on('runningOrder_update', (runningOrderId, runningOrder) => {
-						this._coreHandler.core.callMethod(P.methods.dataRunningOrderUpdate, [runningOrderId, runningOrder]).catch(this._logger.error)
+					.on('rundown_update', (_rundownExternalId, rundown) => {
+						this._coreHandler.core.callMethod(P.methods.dataRundownUpdate, [mutateRundown(rundown)]).catch(this._logger.error)
 					})
-					.on('section_delete', (runningOrderId, sectionId) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentDelete, [runningOrderId, sectionId]).catch(this._logger.error)
+					.on('segment_delete', (rundownExternalId, sectionId) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentDelete, [rundownExternalId, sectionId]).catch(this._logger.error)
 					})
-					.on('section_create', (runningOrderId, sectionId, newSection) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentCreate, [runningOrderId, sectionId, newSection]).catch(this._logger.error)
+					.on('segment_create', (rundownExternalId, _sectionId, newSection) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)]).catch(this._logger.error)
 					})
-					.on('section_update', (runningOrderId, sectionId, newSection) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentUpdate, [runningOrderId, sectionId, newSection]).catch(this._logger.error)
+					.on('segment_update', (rundownExternalId, _sectionId, newSection) => {
+						this._coreHandler.core.callMethod(P.methods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)]).catch(this._logger.error)
 					})
-					.on('story_delete', (runningOrderId, sectionId, storyId) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemDelete, [runningOrderId, sectionId, storyId]).catch(this._logger.error)
+					.on('part_delete', (rundownExternalId, sectionId, storyId) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartDelete, [rundownExternalId, sectionId, storyId]).catch(this._logger.error)
 					})
-					.on('story_create', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemCreate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
+					.on('part_create', (rundownExternalId, sectionId, _storyId, newStory) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
-					.on('story_update', (runningOrderId, sectionId, storyId, newStory) => {
-						this._coreHandler.core.callMethod(P.methods.dataSegmentLineItemUpdate, [runningOrderId, sectionId, storyId, newStory]).catch(this._logger.error)
+					.on('part_update', (rundownExternalId, sectionId, _storyId, newStory) => {
+						this._coreHandler.core.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)]).catch(this._logger.error)
 					})
 
-					this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
-					watcher.setDriveFolder(settings.folderPath)
-					.catch(e => {
-						console.log('Error in addSheetsFolderToWatch', e)
-					})
+					if (settings.folderPath) {
+						this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
+						watcher.setDriveFolder(settings.folderPath)
+						.then(() => this._coreHandler.setStatus(P.StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`]))
+						.catch(e => {
+							console.log('Error in addSheetsFolderToWatch', e)
+						})
+					}
 				}
 			}
 			return Promise.resolve()
@@ -343,7 +348,8 @@ export class SpreadsheetHandler {
 
 			const authUrl = this._currentOAuth2Client.generateAuthUrl({
 				access_type: 'offline',
-				scope: ACCESS_SCOPES
+				scope: ACCESS_SCOPES,
+				prompt: 'consent'
 			})
 
 			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.

@@ -1,4 +1,4 @@
-export interface Item {
+export interface Piece {
 	id: string
 	objectType: string
 	objectTime: number
@@ -6,13 +6,15 @@ export interface Item {
 	clipName: string
 	attributes: {
 		[key: string]: string
-	}
+	},
+	script?: string,
+	transition?: string
 }
-export interface SheetsItem extends Item {
+export interface SheetsPiece extends Piece {
 	position: string // A3:A9
 }
 
-export class SheetItem implements Item {
+export class SheetPiece implements Piece {
 	constructor (
 		public id: string,
 		public objectType: string,
@@ -22,6 +24,8 @@ export class SheetItem implements Item {
 		public attributes: {
 			[key: string]: string
 		},
-		public position: string
+		public position: string,
+		public script?: string,
+		public transition?: string
 	) { }
 }
