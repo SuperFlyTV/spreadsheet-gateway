@@ -2,7 +2,7 @@ import { CoreConnection,
 	CoreOptions,
 	PeripheralDeviceAPI as P,
 	DDPConnectorOptions
-} from 'tv-automation-server-core-integration'
+} from '@sofie-automation/server-core-integration'
 import * as Winston from 'winston'
 import * as fs from 'fs'
 import { Process } from './process'
@@ -11,7 +11,7 @@ import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
-import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 // import { STATUS_CODES } from 'http'
 export interface PeripheralDeviceCommand {
@@ -514,7 +514,7 @@ export class CoreHandler {
 		}
 
 		let dirNames = [
-			'tv-automation-server-core-integration'
+			'@sofie-automation/server-core-integration'
 			// 'mos-connection'
 		]
 		try {
