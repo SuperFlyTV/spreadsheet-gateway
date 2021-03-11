@@ -4,7 +4,7 @@ import { SheetPart } from './Part'
 import { SheetPiece } from './Piece'
 import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
-import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 
 interface RundownMetaData {
 	version: string

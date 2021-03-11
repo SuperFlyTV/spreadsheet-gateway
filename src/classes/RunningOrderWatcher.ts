@@ -12,7 +12,7 @@ import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler, WorkflowType } from '../coreHandler'
 import { MediaDict } from './media'
-import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
