@@ -31,14 +31,8 @@ jobs:
           # check if a release branch, or master, or a tag
           if [[ $DOCKER_TAG =~ ^release([0-9]+)$ || $DOCKER_TAG == "latest" || "${{ steps.docker-tag.outputs.tag }}" == refs/tags/* ]]
           then
-            # If we have a dockerhub image name, then setup to publish there
-            if [ -z "${{ secrets.DOCKERHUB_IMAGE_PREFIX }}" ]
-            then
-              DOCKERHUB_PUBLISH="0"
-            else
-              DOCKERHUB_PUBLISH="1"
-              IMAGES="${{ secrets.DOCKERHUB_IMAGE_PREFIX }}spreadsheet-gateway:$DOCKER_TAG"$'\n'$IMAGES
-            fi
+            DOCKERHUB_PUBLISH="1"
+            IMAGES="sofie-spreadsheet-gateway:$DOCKER_TAG"$'\n'$IMAGES
             # debug output
             echo dockerhub-publish $DOCKERHUB_PUBLISH
             echo images $IMAGES
