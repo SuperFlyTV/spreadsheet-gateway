@@ -12,6 +12,7 @@ jobs:
       - run: exit 0
 
 workflows:
+  version: 2
   build:
     jobs:
       - noop
