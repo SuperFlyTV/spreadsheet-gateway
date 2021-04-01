@@ -158,6 +158,9 @@ export class SpreadsheetHandler {
 		})
 
 	}
+	triggerReloadRundown(rundownId: string) {
+		this.spreadsheetWatcher?.checkRunningOrderById(rundownId, true)
+	}
 	private _deviceOptionsChanged () {
 		let peripheralDevice = this.getThisPeripheralDevice()
 		if (peripheralDevice) {
