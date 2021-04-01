@@ -1,0 +1,162 @@
+name: Node CI
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v**"
+  pull_request:
+
+jobs:
+  build-gateways:
+    # TODO - should this be dependant on tests or something passing if we are on a tag?
+    name: Build gateways
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Get the Docker tag
+        id: docker-tag
+        uses: yuya-takeyama/docker-tag-from-github-ref-action@2b0614b1338c8f19dd9d3ea433ca9bc0cc7057ba
+        with:
+          remove-version-tag-prefix: false
+      - name: Determine images to publish
+        id: image-tags
+        # TODO - image needs changing...
+        run: |
+          IMAGES=
+          DOCKER_TAG=${{ steps.docker-tag.outputs.tag }}
+          # check if a release branch, or master, or a tag
+          if [[ $DOCKER_TAG =~ ^release([0-9]+)$ || $DOCKER_TAG == "latest" || "${{ steps.docker-tag.outputs.tag }}" == refs/tags/* ]]
+          then
+            # If we have a dockerhub image name, then setup to publish there
+            if [ -z "${{ secrets.DOCKERHUB_IMAGE_PREFIX }}" ]
+            then
+              DOCKERHUB_PUBLISH="0"
+            else
+              DOCKERHUB_PUBLISH="1"
+              IMAGES="${{ secrets.DOCKERHUB_IMAGE_PREFIX }}spreadsheet-gateway:$DOCKER_TAG"$'\n'$IMAGES
+            fi
+            # debug output
+            echo dockerhub-publish $DOCKERHUB_PUBLISH
+            echo images $IMAGES
+            echo ::set-output name=images::"$IMAGES"
+            echo ::set-output name=dockerhub-publish::"$DOCKERHUB_PUBLISH"
+          else
+            echo "Skipping docker build"
+          fi
+      - name: Build libs
+        if: ${{ steps.image-tags.outputs.images }}
+        run: |
+          cd packages
+          yarn install
+          yarn build
+          yarn install --prod --ignore-scripts
+      - name: Set up Docker Buildx
+        if: ${{ steps.image-tags.outputs.images }}
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        if: steps.image-tags.outputs.images && steps.image-tags.outputs.dockerhub-publish == '1'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # TODO - do we want this?
+      # - name: Login to GitHub Container Registry
+      #   uses: docker/login-action@v1
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.repository_owner }}
+      #     password: ${{ secrets.CR_PAT }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        if: ${{ steps.image-tags.outputs.images }}
+        with:
+          context: ./packages
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.image-tags.outputs.images }}
+
+  lint-packages:
+    name: Lint Package
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 12.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: Prepare Environment
+        run: |
+          cd packages 
+          yarn install
+          yarn build
+        env:
+          CI: true
+      - name: Run typecheck and linter
+        run: |
+          yarn lint
+        env:
+          CI: true
+
+  validate-prod-dependencies-packages:
+    name: Validate Package production dependencies
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 12.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: Prepare Environment
+        run: |
+          cd packages 
+          yarn install
+        env:
+          CI: true
+      - name: Validate production dependencies
+        run: |
+          if ! git log --format=oneline -n 1 | grep -q "\[ignore-audit\]"; then
+            yarn validate:dependencies
+          else
+            echo "Skipping audit"
+          fi
+        env:
+          CI: true
+
+  validate-all-dependencies-packages:
+    name: Validate all Package dependencies
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 12.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: Prepare Environment
+        run: |
+          cd packages
+          yarn install
+        env:
+          CI: true
+      - name: Validate production dependencies
+        run: |
+          yarn validate:dependencies
+        env:
+          CI: true
+      - name: Validate dev dependencies
+        run: |
+          yarn validate:dev-dependencies
+        env:
+          CI: true

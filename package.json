@@ -38,7 +38,8 @@
     "release": "yarn reset && yarn test && yarn changelog",
     "reset": "git clean -dfx && git reset --hard && yarn",
     "ci": "yarn test",
-    "validate:dependencies": "yarn audit && yarn license-validate",
+    "validate:dependencies": "yarn audit --groups dependencies && yarn license-validate",
+		"validate:dev-dependencies": "yarn audit --groups devDependencies",
     "license-validate": "legally --filter MIT --filter BSD --filter ISC --filter Apache --filter Unlicense",
     "start": "node dist/index.js",
     "unlinkall": "yarn unlink @sofie-automation/server-core-integration && yarn --check-files"
