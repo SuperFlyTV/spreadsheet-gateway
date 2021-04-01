@@ -426,15 +426,19 @@ export class CoreHandler {
 				})
 
 				let settings = studio['config'] as Array<{_id: string, value: string | boolean}>
-				settings.forEach(setting => {
-					if (setting._id.match(/^vmix$/i)) {
-						if (setting.value === true) {
-							this._workflow = 'VMIX'
-						} else {
-							this._workflow = 'ATEM'
+				if (!settings) {
+					this._workflow = 'ATEM' // default
+				} else {
+					settings.forEach(setting => {
+						if (setting._id.match(/^vmix$/i)) {
+							if (setting.value === true) {
+								this._workflow = 'VMIX'
+							} else {
+								this._workflow = 'ATEM'
+							}
 						}
-					}
-				})
+					})
+				}
 			}
 		}
 
