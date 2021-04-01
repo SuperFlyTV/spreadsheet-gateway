@@ -158,7 +158,7 @@ export class SpreadsheetHandler {
 		})
 
 	}
-	triggerReloadRundown(rundownId: string) {
+	triggerReloadRundown (rundownId: string) {
 		this.spreadsheetWatcher?.checkRunningOrderById(rundownId, true)
 	}
 	private _deviceOptionsChanged () {
