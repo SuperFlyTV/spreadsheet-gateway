@@ -106,7 +106,7 @@
     "typescript": "^3.3.3333"
   },
   "standard-version": {
-    "message": "chore(release): %s [skip ci]",
-    "tagPrefix": ""
+    "message": "chore(release): %s",
+    "tagPrefix": "v"
   }
 }
