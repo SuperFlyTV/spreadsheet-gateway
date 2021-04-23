@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.1](https://github.com/SuperFlyTV/spreadsheet-gateway/compare/0.1.0...0.1.1) (2021-04-23)
+
+
+### Features
+
+* reload rundowns from Sofie ([5684b25](https://github.com/SuperFlyTV/spreadsheet-gateway/commit/5684b259b1d6a17abd9f16cedffefe9dac0a0890))
+
+
+### Bug Fixes
+
+* default to ATEM workflow when no setting is found ([282d056](https://github.com/SuperFlyTV/spreadsheet-gateway/commit/282d056b449bffa8d4e6482775608b7ce3ba7e9d))
+
 ## 0.1.0 (2020-06-02)
 
 
