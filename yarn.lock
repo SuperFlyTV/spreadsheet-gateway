@@ -390,20 +390,20 @@
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-4.0.0.tgz#2ff674e9611b45b528896d820d3d7a812de2f0e4"
   integrity sha512-FyD2meJpDPjyNQejSjvnhpgI/azsQkA4lGbuu5BQZfjvJ9cbRZXzeWL2HceCekW4lixO9JPesIIQkSoLjeJHNQ==
 
-"@sofie-automation/blueprints-integration@^1.17.0-in-testing-R29.1":
-  version "1.18.0"
-  resolved "https://registry.yarnpkg.com/@sofie-automation/blueprints-integration/-/blueprints-integration-1.18.0.tgz#a1d73f767a292f7be6a15e432554f98f90a58217"
-  integrity sha512-Or8AAVDEk+F5yObZEX75v0CJd6LCJ4ZlRrog5ZHoPL0mxSMKuncS7oig4aJyw0Xomohfhd5Dl/QvqQp2gllpFw==
+"@sofie-automation/blueprints-integration@1.18.1":
+  version "1.18.1"
+  resolved "https://registry.yarnpkg.com/@sofie-automation/blueprints-integration/-/blueprints-integration-1.18.1.tgz#71421b39a67e289002983d94883b5adefe32c5fa"
+  integrity sha512-nh1tEpsMtX0tVNAu83Hcdf1KRFTExsNC3YPwcoH1VfJgg6lEeXUPwA+hRfcKCAwtRleX/waS3hPt6izScpu6BQ==
   dependencies:
     moment "2.29.1"
     timeline-state-resolver-types "5.5.5"
     tslib "^2.1.0"
     underscore "1.12.0"
 
-"@sofie-automation/server-core-integration@^1.17.0-in-testing-R29.1":
-  version "1.18.0"
-  resolved "https://registry.yarnpkg.com/@sofie-automation/server-core-integration/-/server-core-integration-1.18.0.tgz#0d9674b5b6a8a1719d6a5ad9652363af6c3eeb23"
-  integrity sha512-+mfHO4knllc6j41UlhdoGDv7qOgEvN7MXkR8VjyoVFyk6NtPieABbu8IUxEMYIq4XmU+xngCUyB5s3KCI9L/8w==
+"@sofie-automation/server-core-integration@1.18.1":
+  version "1.18.1"
+  resolved "https://registry.yarnpkg.com/@sofie-automation/server-core-integration/-/server-core-integration-1.18.1.tgz#5a438d369dbf783aed388d8a9401fdeb2f192e9d"
+  integrity sha512-FEkxRWHi7nTz7YpAxo1e2+9HJ5j+OTWbFwAIkV4lsfaOPonFQecbYLyMDOy6PPdzXCj2T+FafI5je/I+Qqqk7w==
   dependencies:
     data-store "3.1.0"
     ejson "^2.2.0"
