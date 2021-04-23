@@ -12,7 +12,7 @@ import { SheetPart } from './Part'
 import * as clone from 'clone'
 import { CoreHandler, WorkflowType } from '../coreHandler'
 import { MediaDict } from './media'
-import { IOutputLayer } from 'tv-automation-sofie-blueprints-integration'
+import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -86,11 +86,11 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
 	 */
-	async checkRunningOrderById (runningOrderId: string): Promise<SheetRundown> {
+	async checkRunningOrderById (runningOrderId: string, asNew?: boolean): Promise<SheetRundown> {
 		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId, this.coreHandler.GetOutputLayers())
 
 		if (runningOrder.gatewayVersion === this.gatewayVersion) {
-			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder)
+			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder, asNew)
 		}
 
 		return runningOrder
@@ -500,9 +500,9 @@ export class RunningOrderWatcher extends EventEmitter {
 		this.stopWatcher()
 	}
 
-	private processUpdatedRunningOrder (rundownId: string, rundown: SheetRundown | null) {
+	private processUpdatedRunningOrder (rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
 
-		const oldRundown = this.runningOrders[rundownId]
+		const oldRundown = !asNew && this.runningOrders[rundownId]
 
 		// Check if runningOrders have changed:
 

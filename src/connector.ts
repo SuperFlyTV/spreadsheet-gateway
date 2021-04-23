@@ -80,7 +80,7 @@ export class Connector {
 		return this._process.init(this._config.process)
 	}
 	initCore () {
-		return this.coreHandler.init(this._config.device, this._config.core, this._process)
+		return this.coreHandler.init(this._config.device, this._config.core, this._process, this.spreadsheetHandler)
 	}
 	initSpreadsheetHandler (): Promise<void> {
 		return this.spreadsheetHandler.init(this.coreHandler)

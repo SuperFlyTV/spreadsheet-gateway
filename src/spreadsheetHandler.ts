@@ -3,7 +3,7 @@ import * as Winston from 'winston'
 import {
 	CollectionObj,
 	PeripheralDeviceAPI as P
-} from 'tv-automation-server-core-integration'
+} from '@sofie-automation/server-core-integration'
 import { google } from 'googleapis'
 import { OAuth2Client } from 'google-auth-library'
 
@@ -157,6 +157,9 @@ export class SpreadsheetHandler {
 			}
 		})
 
+	}
+	triggerReloadRundown (rundownId: string) {
+		this.spreadsheetWatcher?.checkRunningOrderById(rundownId, true)
 	}
 	private _deviceOptionsChanged () {
 		let peripheralDevice = this.getThisPeripheralDevice()
