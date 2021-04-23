@@ -29,7 +29,7 @@ jobs:
           IMAGES=
           DOCKER_TAG=${{ steps.docker-tag.outputs.tag }}
           # check if a release branch, or master, or a tag
-          if [[ $DOCKER_TAG =~ ^release([0-9]+)$ || $DOCKER_TAG == "latest" || "${{ steps.docker-tag.outputs.tag }}" == refs/tags/* ]]
+          if [[ $DOCKER_TAG =~ ^release([0-9]+)$ || $DOCKER_TAG == "latest" || "${{ github.ref }}" == refs/tags/* ]]
           then
             DOCKERHUB_PUBLISH="1"
             IMAGES="superflytv/sofie-spreadsheet-gateway:$DOCKER_TAG"$'\n'$IMAGES
