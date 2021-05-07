@@ -14,8 +14,7 @@ export const SPREADSHEET_DEVICE_CONFIG_MANIFEST: DeviceConfigManifest = {
 		}
 	],
 	deviceOAuthFlow: {
-		credentialsHelp: 'Go to the url below and click on the "Enable the Drive API button". Then click on "Download Client configuration", save the credentials.json file and upload it here.',
+		credentialsHelp: 'Go to the url below and follow the prerequisite instructions for creating a Google Cloud Platform project with the API enabled and Authorization credentials for a Desktop Application. Save the credentials.json file you get from the last step and upload it here.',
 		credentialsURL: 'https://developers.google.com/drive/api/v3/quickstart/nodejs'
-
 	}
 }
