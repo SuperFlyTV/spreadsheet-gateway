@@ -390,27 +390,27 @@
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-4.0.0.tgz#2ff674e9611b45b528896d820d3d7a812de2f0e4"
   integrity sha512-FyD2meJpDPjyNQejSjvnhpgI/azsQkA4lGbuu5BQZfjvJ9cbRZXzeWL2HceCekW4lixO9JPesIIQkSoLjeJHNQ==
 
-"@sofie-automation/blueprints-integration@1.18.1":
-  version "1.18.1"
-  resolved "https://registry.yarnpkg.com/@sofie-automation/blueprints-integration/-/blueprints-integration-1.18.1.tgz#71421b39a67e289002983d94883b5adefe32c5fa"
-  integrity sha512-nh1tEpsMtX0tVNAu83Hcdf1KRFTExsNC3YPwcoH1VfJgg6lEeXUPwA+hRfcKCAwtRleX/waS3hPt6izScpu6BQ==
+"@sofie-automation/blueprints-integration@1.33.0-in-testing.1":
+  version "1.33.0-in-testing.1"
+  resolved "https://registry.yarnpkg.com/@sofie-automation/blueprints-integration/-/blueprints-integration-1.33.0-in-testing.1.tgz#56b0bf7ecb2e166cfe293be175c747546cf92f6f"
+  integrity sha512-3VTkh2Hqw6lTGY8wrpxcTmXm/Aw+JKjz2Zw85xCGKgHumzICIcwnaDQK1V/ulTSMe8eXt++xejPzJA6r8VfnQg==
   dependencies:
     moment "2.29.1"
-    timeline-state-resolver-types "5.5.5"
+    timeline-state-resolver-types "5.7.0-nightly-release33-20210421-102534-d3150d7e3.0"
     tslib "^2.1.0"
-    underscore "1.12.0"
+    underscore "1.12.1"
 
-"@sofie-automation/server-core-integration@1.18.1":
-  version "1.18.1"
-  resolved "https://registry.yarnpkg.com/@sofie-automation/server-core-integration/-/server-core-integration-1.18.1.tgz#5a438d369dbf783aed388d8a9401fdeb2f192e9d"
-  integrity sha512-FEkxRWHi7nTz7YpAxo1e2+9HJ5j+OTWbFwAIkV4lsfaOPonFQecbYLyMDOy6PPdzXCj2T+FafI5je/I+Qqqk7w==
+"@sofie-automation/server-core-integration@1.33.0-in-testing.1":
+  version "1.33.0-in-testing.1"
+  resolved "https://registry.yarnpkg.com/@sofie-automation/server-core-integration/-/server-core-integration-1.33.0-in-testing.1.tgz#2351760bd3f4747a5bfb9bdc46a6985975d0d68b"
+  integrity sha512-aasqllxMLH9Lu8thlH5wIL0T2e/S4shcWbbO+JqewG71HGtI7K9l4vLQHoHWoF3Ut0m5fMS2eMjVwCDOXhOYyg==
   dependencies:
     data-store "3.1.0"
     ejson "^2.2.0"
     faye-websocket "^0.11.3"
-    got "^11.8.1"
+    got "^11.8.2"
     tslib "^2.0.3"
-    underscore "^1.12.0"
+    underscore "^1.12.1"
 
 "@stroncium/procfs@^1.0.0":
   version "1.2.1"
@@ -2403,7 +2403,7 @@ googleapis@^40.0.0:
     google-auth-library "^4.0.0"
     googleapis-common "^2.0.2"
 
-got@^11.8.1:
+got@^11.8.2:
   version "11.8.2"
   resolved "https://registry.yarnpkg.com/got/-/got-11.8.2.tgz#7abb3959ea28c31f3576f1576c1effce23f33599"
   integrity sha512-D0QywKgIe30ODs+fm8wMZiAcZjypcCodPNuMz5H9Mny7RJ+IjJ10BdmGW7OM7fHXP+O7r6ZwapQ/YQmMSvB0UQ==
@@ -5429,10 +5429,10 @@ through@2, "through@>=2.2.7 <3":
   resolved "https://registry.yarnpkg.com/through/-/through-2.3.8.tgz#0dd4c9ffaabc357960b1b724115d7e0e86a2e1f5"
   integrity sha1-DdTJ/6q8NXlgsbckEV1+Doai4fU=
 
-timeline-state-resolver-types@5.5.5:
-  version "5.5.5"
-  resolved "https://registry.yarnpkg.com/timeline-state-resolver-types/-/timeline-state-resolver-types-5.5.5.tgz#22b47caef4962f8890ddc7198a33888054e0cb9e"
-  integrity sha512-l80O+VDepj1SQVizjKGWum1735zbq5J/JQ7HYYwrpNDFWm0RC6QkUYeYP2YDXhBCKr49bhxTN5rS6u8ewIKLaQ==
+timeline-state-resolver-types@5.7.0-nightly-release33-20210421-102534-d3150d7e3.0:
+  version "5.7.0-nightly-release33-20210421-102534-d3150d7e3.0"
+  resolved "https://registry.yarnpkg.com/timeline-state-resolver-types/-/timeline-state-resolver-types-5.7.0-nightly-release33-20210421-102534-d3150d7e3.0.tgz#569d8436cb89996c32d354acf63ade5e91a6140c"
+  integrity sha512-0duh41MtYAnDaFoQ2JibTzGtmz+c/ydoAECmpdnpo0GVMb96viz7eLnTkMTWMMlwJBYJbuzPtvmkgh/ZWaZRvw==
   dependencies:
     tslib "^1.13.0"
 
@@ -5725,15 +5725,15 @@ unbox-primitive@^1.0.0:
     has-symbols "^1.0.2"
     which-boxed-primitive "^1.0.2"
 
-underscore@1.12.0:
-  version "1.12.0"
-  resolved "https://registry.yarnpkg.com/underscore/-/underscore-1.12.0.tgz#4814940551fc80587cef7840d1ebb0f16453be97"
-  integrity sha512-21rQzss/XPMjolTiIezSu3JAjgagXKROtNrYFEOWK109qY1Uv2tVjPTZ1ci2HgvQDA16gHYSthQIJfB+XId/rQ==
-
-underscore@^1.12.0, underscore@^1.9.1:
+underscore@1.12.1, underscore@^1.9.1:
   version "1.12.1"
   resolved "https://registry.yarnpkg.com/underscore/-/underscore-1.12.1.tgz#7bb8cc9b3d397e201cf8553336d262544ead829e"
   integrity sha512-hEQt0+ZLDVUMhebKxL4x1BTtDY7bavVofhZ9KZ4aI26X9SRaE+Y3m83XUL1UP2jn8ynjndwCCpEHdUG+9pP1Tw==
+
+underscore@^1.12.1:
+  version "1.13.1"
+  resolved "https://registry.yarnpkg.com/underscore/-/underscore-1.13.1.tgz#0c1c6bd2df54b6b69f2314066d65b6cde6fcf9d1"
+  integrity sha512-hzSoAVtJF+3ZtiFX0VgfFPHEDRm7Y/QPjGyNo4TVdnDTdft3tr8hEkD25a1jC+TjTuE7tkHGKkhwCgs9dgBB2g==
 
 union-value@^1.0.0:
   version "1.0.1"
