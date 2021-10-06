@@ -149,7 +149,7 @@ export class SpreadsheetHandler {
 						this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken])
 						.catch(this._logger.error)
 
-						resolve()
+						resolve(undefined)
 					}
 				})
 			} else {
