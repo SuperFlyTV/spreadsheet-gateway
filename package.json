@@ -63,8 +63,8 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@sofie-automation/blueprints-integration": "1.18.1",
-    "@sofie-automation/server-core-integration": "1.18.1",
+    "@sofie-automation/blueprints-integration": "1.35.0",
+    "@sofie-automation/server-core-integration": "1.35.0",
     "@types/dotenv": "^6.1.1",
     "@types/request-promise": "^4.1.44",
     "clone": "^2.1.2",
