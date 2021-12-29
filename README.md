@@ -23,16 +23,18 @@ To set up, follow the instructions in your Sofie Core interface (in the settings
 | -port  | Port of Core   |  CORE_PORT |
 | -log  | Path to output log |  CORE_LOG |
 
-## Installation for dev
+## Installation (for developers)
 
+```
 yarn
 
 yarn build
+```
 
 ### Dev dependencies:
 
 * yarn
-	https://yarnpkg.com
+	* https://yarnpkg.com
 
 * jest
-	yarn global add jest
+	* `yarn global add jest`
