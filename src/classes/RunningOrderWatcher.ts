@@ -615,7 +615,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		return result.data.startPageToken
 	}
 	private async checkForChanges (): Promise<any> {
-		let pageToken: string | undefined = await this.getPageToken()
+		let pageToken: string | null | undefined = await this.getPageToken()
 
 		while (pageToken) {
 			const listData: GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({

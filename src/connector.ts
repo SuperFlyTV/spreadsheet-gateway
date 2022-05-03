@@ -1,7 +1,7 @@
 
 import { SpreadsheetHandler, SpreadsheetConfig } from './spreadsheetHandler'
 import { CoreHandler, CoreConfig } from './coreHandler'
-import * as Winston from 'winston'
+import * as winston from 'winston'
 import { Process } from './process'
 
 export interface Config {
@@ -25,10 +25,10 @@ export class Connector {
 	private spreadsheetHandler: SpreadsheetHandler
 	private coreHandler: CoreHandler
 	private _config: Config
-	private _logger: Winston.LoggerInstance
+	private _logger: winston.Logger
 	private _process: Process
 
-	constructor (logger: Winston.LoggerInstance, config: Config) {
+	constructor (logger: winston.Logger, config: Config) {
 		this._logger = logger
 		this._config = config
 		this._process = new Process(this._logger)

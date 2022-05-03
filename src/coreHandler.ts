@@ -3,7 +3,7 @@ import { CoreConnection,
 	PeripheralDeviceAPI as P,
 	DDPConnectorOptions
 } from '@sofie-automation/server-core-integration'
-import * as Winston from 'winston'
+import * as winston from 'winston'
 import * as fs from 'fs'
 import { Process } from './process'
 
@@ -42,7 +42,7 @@ export class CoreHandler {
 	public core: CoreConnection
 	public doReceiveAuthToken?: (authToken: string) => Promise<any>
 
-	private logger: Winston.LoggerInstance
+	private logger: winston.Logger
 	private _observers: Array<any> = []
 	private _onConnected?: () => any
 	private _subscriptions: Array<any> = []
@@ -56,7 +56,7 @@ export class CoreHandler {
 	private _workflow: WorkflowType
 	private _spreadsheetHandler: SpreadsheetHandler
 
-	constructor (logger: Winston.LoggerInstance, deviceOptions: DeviceConfig) {
+	constructor (logger: winston.Logger, deviceOptions: DeviceConfig) {
 		this.logger = logger
 		this.core = new CoreConnection(this.getCoreConnectionOptions(deviceOptions, 'Spreadsheet Gateway'))
 	}

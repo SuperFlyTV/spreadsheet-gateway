@@ -1,6 +1,6 @@
 
 import { Connector, Config } from './connector'
-import * as Winston from 'winston'
+import * as winston from 'winston'
 import _ = require('underscore')
 
 // CLI arguments / Environment variables --------------
@@ -68,55 +68,23 @@ CLI                ENV
 	process.exit(0)
 }
 
-/**
- * Used when JSON.stringifying values that might be circular
- * Usage: JSON.stringify(value, JSONStringifyCircular()))
- */
-let JSONStringifyCircular = () => {
-	let cacheValues: any[] = []
-	let cacheKeys: any[] = []
-	let stringifyFixer = (key: string, value: any) => {
-		if (typeof value === 'object' && value !== null) {
-			let i = cacheValues.indexOf(value)
-			if (i !== -1) {
-				// Duplicate reference found
-				try {
-					// If this value does not reference a parent it can be deduped
-					return JSON.parse(JSON.stringify(value))
-				} catch (error) {
-					// discard key if value cannot be deduped
-					return '[circular of ' + (cacheKeys[i] || '*root*') + ']'
-				}
-			}
-			// Store value in our collection
-			cacheValues.push(value)
-			cacheKeys.push(key)
-		}
-		return value
-	}
-	return stringifyFixer
-}
 // Setup logging --------------------------------------
-let logger = new (Winston.Logger)({
-})
+let logger = winston.createLogger({ })
 
 if (logPath) {
 	// Log json to file, human-readable to console
 	console.log('Logging to', logPath)
-	logger.add(Winston.transports.Console, {
+	logger.add(new winston.transports.Console({
 		level: 'verbose',
 		handleExceptions: true,
-		json: false
-	})
-	logger.add(Winston.transports.File, {
+		format: winston.format.simple()
+	}))
+	logger.add(new winston.transports.File({
 		level: 'debug',
 		handleExceptions: true,
-		json: true,
-		stringify: (obj: any) => {
-			return JSON.stringify(obj, JSONStringifyCircular())
-		},
+		format: winston.format.json({ circularValue: null }),
 		filename: logPath
-	})
+	}))
 	// Hijack console.log:
 	// @ts-ignore
 	let orgConsoleLog = console.log
@@ -139,14 +107,11 @@ if (logPath) {
 } else {
 	console.log('Logging to Console')
 	// Log json to console
-	logger.add(Winston.transports.Console,{
+	logger.add(new winston.transports.Console({
 		// level: 'verbose',
 		handleExceptions: true,
-		json: true,
-		stringify: (obj: any) => {
-			return JSON.stringify(obj, JSONStringifyCircular()) // make single line
-		}
-	})
+		format: winston.format.json({ circularValue: null })
+	}))
 	// Hijack console.log:
 	// @ts-ignore
 	let orgConsoleLog = console.log

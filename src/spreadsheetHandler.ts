@@ -1,5 +1,5 @@
 import * as _ from 'underscore'
-import * as Winston from 'winston'
+import * as winston from 'winston'
 import {
 	CollectionObj,
 	PeripheralDeviceAPI as P
@@ -64,14 +64,14 @@ export class SpreadsheetHandler {
 	private _currentOAuth2Client: OAuth2Client | null = null
 	private _currentOAuth2ClientAuthorized: boolean = false
 
-	private _logger: Winston.LoggerInstance
+	private _logger: winston.Logger
 	private _disposed: boolean = false
 	private _settings?: SpreadsheetDeviceSettings
 	private _coreHandler: CoreHandler
 	private _observers: Array<any> = []
 	private _triggerupdateDevicesTimeout: any = null
 
-	constructor (logger: Winston.LoggerInstance, config: SpreadsheetConfig, coreHandler: CoreHandler) {
+	constructor (logger: winston.Logger, config: SpreadsheetConfig, coreHandler: CoreHandler) {
 		this._logger = logger
 		this.options = config
 		this._coreHandler = coreHandler
