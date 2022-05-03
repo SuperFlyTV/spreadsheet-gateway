@@ -1,5 +1,4 @@
-import { google, sheets_v4 } from 'googleapis'
-import { OAuth2Client } from 'googleapis-common'
+import { Auth, Common, google, sheets_v4 } from 'googleapis'
 import { SheetRundown } from './Rundown'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 const sheets = google.sheets('v4')
@@ -15,7 +14,7 @@ export interface SheetUpdate {
 export class SheetsManager {
 	private currentFolder = ''
 
-	constructor (private auth: OAuth2Client) { }
+	constructor(private auth: Auth.OAuth2Client) {}
 
 	/**
 	 * Creates a Google Sheets api-specific change element
@@ -24,10 +23,10 @@ export class SheetsManager {
 	 * @param cell Cell range for the cell being updated. Eg. "A2"
 	 * @param newValue The new value for the cell
 	 */
-	static createSheetValueChange (sheet: string, cell: string, newValue: any): sheets_v4.Schema$ValueRange {
+	static createSheetValueChange(sheet: string, cell: string, newValue: unknown): sheets_v4.Schema$ValueRange {
 		return {
 			range: `${sheet}!${cell}`,
-			values: [[newValue]]
+			values: [[newValue]],
 		}
 	}
 
@@ -36,11 +35,16 @@ export class SheetsManager {
 	 *
 	 * @param rundownSheetId Id of the google sheet containing the Running Order
 	 */
-	downloadRunningOrder (rundownSheetId: string, outputLayers: IOutputLayer[]): Promise<SheetRundown> {
-		return this.downloadSheet(rundownSheetId)
-		.then(data => {
+	async downloadRunningOrder(rundownSheetId: string, outputLayers: IOutputLayer[]): Promise<SheetRundown> {
+		return this.downloadSheet(rundownSheetId).then((data) => {
 			const runningOrderTitle = data.meta.properties ? data.meta.properties.title || 'unknown' : 'unknown'
-			return SheetRundown.fromSheetCells(rundownSheetId, runningOrderTitle, data.values.values || [], outputLayers, this)
+			return SheetRundown.fromSheetCells(
+				rundownSheetId,
+				runningOrderTitle,
+				data.values.values || [],
+				outputLayers,
+				this
+			)
 		})
 	}
 
@@ -49,29 +53,30 @@ export class SheetsManager {
 	 *
 	 * @param spreadsheetId Id of the google spreadsheet to download
 	 */
-	downloadSheet (spreadsheetId: string) {
+	async downloadSheet(spreadsheetId: string): Promise<{
+		meta: sheets_v4.Schema$Spreadsheet
+		values: sheets_v4.Schema$ValueRange
+	}> {
 		const request = {
 			// The spreadsheet to request.
 			auth: this.auth,
 			spreadsheetId,
 			// The ranges to retrieve from the spreadsheet.
-			range: SHEET_NAME // Get all cells in Rundown sheet
-
+			range: SHEET_NAME, // Get all cells in Rundown sheet
 		}
 		return Promise.all([
 			sheets.spreadsheets.get({
 				auth: this.auth,
 				spreadsheetId,
-				fields: 'spreadsheetId,properties.title'
+				fields: 'spreadsheetId,properties.title',
 			}),
-			sheets.spreadsheets.values.get(request)])
-			.then(([meta, values]) => {
-				return {
-					meta: meta.data,
-					values: values.data
-				}
-			})
-
+			sheets.spreadsheets.values.get(request),
+		]).then(([meta, values]) => {
+			return {
+				meta: meta.data,
+				values: values.data,
+			}
+		})
 	}
 
 	/**
@@ -80,12 +85,15 @@ export class SheetsManager {
 	 * @param sheet The name of the sheet within the document, e.g. 'Rundown'.
 	 * @param sheetUpdates The updates to apply.
 	 */
-	async updateSheetWithSheetUpdates (spreadsheetId: string, sheet: string, sheetUpdates: SheetUpdate[]) {
-		let googleUpdates = sheetUpdates.map(update => {
+	async updateSheetWithSheetUpdates(
+		spreadsheetId: string,
+		sheet: string,
+		sheetUpdates: SheetUpdate[]
+	): Promise<Common.GaxiosResponse<sheets_v4.Schema$BatchUpdateValuesResponse>> {
+		const googleUpdates = sheetUpdates.map((update) => {
 			return SheetsManager.createSheetValueChange(sheet, update.cellPosition, update.value)
 		})
 		return this.updateSheet(spreadsheetId, googleUpdates)
-
 	}
 
 	/**
@@ -94,18 +102,21 @@ export class SheetsManager {
 	 * @param spreadsheetId Id of spreadsheet to update
 	 * @param sheetUpdates List of updates to issue to the google spreadsheet
 	 */
-	updateSheet (spreadsheetId: string, sheetUpdates: sheets_v4.Schema$ValueRange[]) {
-		let request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
+	async updateSheet(
+		spreadsheetId: string,
+		sheetUpdates: sheets_v4.Schema$ValueRange[]
+	): Promise<Common.GaxiosResponse<sheets_v4.Schema$BatchUpdateValuesResponse>> {
+		const request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
 			spreadsheetId: spreadsheetId,
 			requestBody: {
 				valueInputOption: 'RAW',
-				data: sheetUpdates
+				data: sheetUpdates,
 				// [{
 				//     range: 'A1:A1',
 				//     values: [[1]]
 				// }]
 			},
-			auth: this.auth
+			auth: this.auth,
 		}
 		return sheets.spreadsheets.values.batchUpdate(request)
 	}
@@ -116,7 +127,7 @@ export class SheetsManager {
 	 *
 	 * @param folderName Name of Google Drive folder
 	 */
-	async getSheetsInDriveFolder (folderName: string): Promise<string[]> {
+	async getSheetsInDriveFolder(folderName: string): Promise<string[]> {
 		const drive = google.drive({ version: 'v3', auth: this.auth })
 
 		const fileList = await drive.files.list({
@@ -124,20 +135,15 @@ export class SheetsManager {
 			q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}'`,
 			pageSize: 100,
 			spaces: 'drive',
-			fields: 'nextPageToken, files(*)'
+			fields: 'nextPageToken, files(*)',
 		})
 		// Use first hit only. We assume that that would be the correct folder.
 		// If you have multiple folders with the same name, it will become un-deterministic
-		if (
-			fileList.data.files &&
-			fileList.data.files[0] &&
-			fileList.data.files[0].id
-		) {
+		if (fileList.data.files && fileList.data.files[0] && fileList.data.files[0].id) {
 			return this.getSheetsInDriveFolderId(fileList.data.files[0].id)
 		} else {
 			return []
 		}
-
 	}
 	/**
 	 * Returns a list of ids of Google Spreadsheets in provided folder.
@@ -145,7 +151,7 @@ export class SheetsManager {
 	 * @param folderId Id of Google Drive folder to retrieve spreadsheets from
 	 * @param nextPageToken Google drive nextPageToken pagination token.
 	 */
-	async getSheetsInDriveFolderId (folderId: string, nextPageToken?: string): Promise<string[]> {
+	async getSheetsInDriveFolderId(folderId: string, nextPageToken?: string): Promise<string[]> {
 		const drive = google.drive({ version: 'v3', auth: this.auth })
 
 		this.currentFolder = folderId
@@ -154,19 +160,19 @@ export class SheetsManager {
 			q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
 			spaces: 'drive',
 			fields: 'nextPageToken, files(*)',
-			pageToken: nextPageToken
+			pageToken: nextPageToken,
 		})
 
-		let resultData = (fileList.data.files || [])
-		.filter(file => {
-			if (file.name && file.name[0] !== '_' && !file.trashed) {
-				return file.id
-			}
-			return
-		})
-		.map(file => {
-			return file.id || ''
-		})
+		const resultData = (fileList.data.files || [])
+			.filter((file) => {
+				if (file.name && file.name[0] !== '_' && !file.trashed) {
+					return file.id
+				}
+				return
+			})
+			.map((file) => {
+				return file.id || ''
+			})
 
 		if (fileList.data.nextPageToken) {
 			const result = await this.getSheetsInDriveFolderId(folderId, fileList.data.nextPageToken)
@@ -175,28 +181,31 @@ export class SheetsManager {
 		} else {
 			return resultData
 		}
-
 	}
 
 	/**
 	 * Checks if a sheet contains the 'Rundown' range.
 	 * @param {string} sheetid Id of the sheet to check.
 	 */
-	async checkSheetIsValid (sheetid: string): Promise<boolean> {
-		const spreadsheet = await sheets.spreadsheets.get({
-			spreadsheetId: sheetid,
-			auth: this.auth
-		}).catch(console.error)
+	async checkSheetIsValid(sheetid: string): Promise<boolean> {
+		const spreadsheet = await sheets.spreadsheets
+			.get({
+				spreadsheetId: sheetid,
+				auth: this.auth,
+			})
+			.catch(console.error)
 
 		if (!spreadsheet) {
 			return Promise.resolve(false)
 		}
 
-		const file = await drive.files.get({
-			fileId: sheetid,
-			fields: 'parents',
-			auth: this.auth
-		}).catch(console.error)
+		const file = await drive.files
+			.get({
+				fileId: sheetid,
+				fields: 'parents',
+				auth: this.auth,
+			})
+			.catch(console.error)
 
 		if (!file) {
 			return Promise.resolve(false)
@@ -206,7 +215,7 @@ export class SheetsManager {
 
 		if (spreadsheet.data && file.data) {
 			if (spreadsheet.data.sheets && file.data.parents) {
-				const sheets = spreadsheet.data.sheets.map(sheet => {
+				const sheets = spreadsheet.data.sheets.map((sheet) => {
 					if (sheet.properties) {
 						return sheet.properties.title
 					}

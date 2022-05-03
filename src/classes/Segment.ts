@@ -9,7 +9,7 @@ export interface Segment {
 }
 
 export class SheetSegment implements Segment {
-	constructor (
+	constructor(
 		public rundownId: string,
 		public externalId: string,
 		public rank: number,
@@ -17,19 +17,19 @@ export class SheetSegment implements Segment {
 		public float: boolean,
 		public parts: SheetPart[] = []
 	) {}
-	serialize (): Segment {
+	serialize(): Segment {
 		return {
-			rundownId:		this.rundownId,
-			externalId:					this.externalId,
-			rank:				this.rank,
-			name:				this.name,
-			float:				this.float
+			rundownId: this.rundownId,
+			externalId: this.externalId,
+			rank: this.rank,
+			name: this.name,
+			float: this.float,
 		}
 	}
-	addPart (part: SheetPart) {
+	addPart(part: SheetPart): void {
 		this.parts.push(part)
 	}
-	addParts (parts: SheetPart[]) {
-		parts.forEach(story => this.addPart(story))
+	addParts(parts: SheetPart[]): void {
+		parts.forEach((story) => this.addPart(story))
 	}
 }

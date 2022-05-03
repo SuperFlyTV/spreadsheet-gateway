@@ -1,4 +1,3 @@
-
 // jest.mock('deep-equal')
 
 describe('Items', () => {

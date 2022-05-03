@@ -1,12 +1,10 @@
-
 import { SheetRundown } from '../Rundown'
 
 // import * as cellData from './cellValues.json'
 
 describe('RunningOrders', () => {
-
 	it('should exist', () => {
-		let a = new SheetRundown('test', 'some name', 'v0.2', 1, 2)
+		const a = new SheetRundown('test', 'some name', 'v0.2', 1, 2)
 		expect(a).toBeTruthy()
 	})
 	// it('should correctly parse 2d cell array', () => {

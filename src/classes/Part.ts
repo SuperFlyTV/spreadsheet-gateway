@@ -15,8 +15,7 @@ export interface Part {
 }
 
 export class SheetPart implements Part {
-
-	constructor (
+	constructor(
 		public type: string,
 		public segmentId: string,
 		public externalId: string, // unique within the parent section
@@ -24,24 +23,25 @@ export class SheetPart implements Part {
 		public name: string,
 		public float: boolean,
 		public script: string,
-		public pieces: SheetPiece[] = []) { }
+		public pieces: SheetPiece[] = []
+	) {}
 
-	serialize () {
+	serialize(): object {
 		return {
-			type: 				this.type,
-			segmentId: 			this.segmentId,
-			id: 					this.externalId,
-			rank: 				this.rank,
-			name: 				this.name,
-			float: 				this.float,
-			script: 				this.script,
-			pieces: 				this.pieces
+			type: this.type,
+			segmentId: this.segmentId,
+			id: this.externalId,
+			rank: this.rank,
+			name: this.name,
+			float: this.float,
+			script: this.script,
+			pieces: this.pieces,
 		}
 	}
-	addPieces (piece: SheetPiece[]) {
-		this.pieces = this.pieces.concat(piece)
+	addPieces(piece: SheetPiece[]): void {
+		this.pieces.push(...piece)
 	}
-	addPiece (piece: SheetPiece) {
+	addPiece(piece: SheetPiece): void {
 		this.pieces.push(piece)
 	}
 }

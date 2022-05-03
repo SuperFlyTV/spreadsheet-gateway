@@ -5,29 +5,29 @@ import { SheetSegment } from './classes/Segment'
 import { SheetPart } from './classes/Part'
 
 /** These are temorary mutation functions to convert sheet types to ingest types */
-export function mutateRundown (rundown: SheetRundown): IngestRundown {
+export function mutateRundown(rundown: SheetRundown): IngestRundown {
 	return {
 		externalId: rundown.externalId,
 		name: rundown.name,
 		type: 'external',
 		payload: _.omit(rundown, 'segments'),
-		segments: _.values(rundown.segments || {}).map(mutateSegment)
+		segments: _.values(rundown.segments || {}).map(mutateSegment),
 	}
 }
-export function mutateSegment (segment: SheetSegment): IngestSegment {
+export function mutateSegment(segment: SheetSegment): IngestSegment {
 	return {
 		externalId: segment.externalId,
 		name: segment.name,
 		rank: segment.rank,
 		payload: _.omit(segment, 'parts'),
-		parts: _.values(segment.parts || {}).map(mutatePart)
+		parts: _.values(segment.parts || {}).map(mutatePart),
 	}
 }
-export function mutatePart (part: SheetPart): IngestPart {
+export function mutatePart(part: SheetPart): IngestPart {
 	return {
 		externalId: part.externalId,
 		name: part.name,
 		rank: part.rank,
-		payload: part
+		payload: part,
 	}
 }

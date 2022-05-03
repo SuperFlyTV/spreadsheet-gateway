@@ -2,10 +2,9 @@ import { EventEmitter } from 'events'
 import * as request from 'request-promise'
 import * as dotenv from 'dotenv'
 import { SheetRundown } from './Rundown'
-import { OAuth2Client } from 'googleapis-common'
+import { Auth, Common } from 'googleapis'
 import { google, drive_v3 } from 'googleapis'
 import { SheetsManager, SheetUpdate } from './SheetManager'
-import { GaxiosResponse } from 'gaxios'
 import * as _ from 'underscore'
 import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
@@ -18,21 +17,30 @@ dotenv.config()
 export class RunningOrderWatcher extends EventEmitter {
 	public sheetFolderName?: string
 
-	on: ((event: 'info', listener: (message: string) => void) => this) &
+	on!: ((event: 'info', listener: (message: string) => void) => this) &
 		((event: 'error', listener: (error: any, stack?: any) => void) => this) &
 		((event: 'warning', listener: (message: string) => void) => this) &
-
 		((event: 'rundown_delete', listener: (runningOrderId: string) => void) => this) &
 		((event: 'rundown_create', listener: (runningOrderId: string, runningOrder: SheetRundown) => void) => this) &
 		((event: 'rundown_update', listener: (runningOrderId: string, runningOrder: SheetRundown) => void) => this) &
-
 		((event: 'segment_delete', listener: (runningOrderId: string, sectionId: string) => void) => this) &
-		((event: 'segment_create', listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void) => this) &
-		((event: 'segment_update', listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void) => this) &
-
+		((
+			event: 'segment_create',
+			listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void
+		) => this) &
+		((
+			event: 'segment_update',
+			listener: (runningOrderId: string, sectionId: string, newSection: SheetSegment) => void
+		) => this) &
 		((event: 'part_delete', listener: (runningOrderId: string, sectionId: string, storyId: string) => void) => this) &
-		((event: 'part_create', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void) => this) &
-		((event: 'part_update', listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void) => this)
+		((
+			event: 'part_create',
+			listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void
+		) => this) &
+		((
+			event: 'part_update',
+			listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void
+		) => this)
 
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
@@ -46,12 +54,12 @@ export class RunningOrderWatcher extends EventEmitter {
 	private mediaPollInterval: NodeJS.Timer | undefined
 
 	private drive: drive_v3.Drive
-	private currentlyChecking: boolean = false
+	private currentlyChecking = false
 	private sheetManager: SheetsManager
 	private pageToken?: string
 	private _lastMedia: MediaDict = {}
 	private _lastOutputLayers: IOutputLayer[] = []
-	private _lastWorkflow: WorkflowType
+	private _lastWorkflow: WorkflowType | undefined
 	// private _lastOutputLayers: Array<ISourceLayer> = []
 	/**
 	 * A Running Order watcher which will poll Google Drive for changes and emit events
@@ -62,8 +70,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	 * @param gatewayVersion Set version of gateway
 	 * @param delayStart (Optional) Set to a falsy value to prevent the watcher to start watching immediately.
 	 */
-	constructor (
-		private authClient: OAuth2Client,
+	constructor(
+		private authClient: Auth.OAuth2Client,
 		private coreHandler: CoreHandler,
 		private gatewayVersion: string,
 		delayStart?: boolean
@@ -86,8 +94,11 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
 	 */
-	async checkRunningOrderById (runningOrderId: string, asNew?: boolean): Promise<SheetRundown> {
-		const runningOrder = await this.sheetManager.downloadRunningOrder(runningOrderId, this.coreHandler.GetOutputLayers())
+	async checkRunningOrderById(runningOrderId: string, asNew?: boolean): Promise<SheetRundown> {
+		const runningOrder = await this.sheetManager.downloadRunningOrder(
+			runningOrderId,
+			this.coreHandler.GetOutputLayers()
+		)
 
 		if (runningOrder.gatewayVersion === this.gatewayVersion) {
 			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder, asNew)
@@ -96,14 +107,15 @@ export class RunningOrderWatcher extends EventEmitter {
 		return runningOrder
 	}
 
-	async checkDriveFolder (): Promise<SheetRundown[]> {
+	async checkDriveFolder(): Promise<SheetRundown[]> {
 		if (!this.sheetFolderName) return []
 
 		const runningOrderIds = await this.sheetManager.getSheetsInDriveFolder(this.sheetFolderName)
-		return Promise.all(runningOrderIds.map(roId => {
-			return this.checkRunningOrderById(roId)
-		}))
-
+		return Promise.all(
+			runningOrderIds.map(async (roId) => {
+				return this.checkRunningOrderById(roId)
+			})
+		)
 	}
 	/**
 	 * Will add all currently available Running Orders from the first drive folder
@@ -111,70 +123,70 @@ export class RunningOrderWatcher extends EventEmitter {
 	 *
 	 * @param sheetFolderName Name of folder to add Running Orders from. Eg. "My Running Orders"
 	 */
-	async setDriveFolder (sheetFolderName: string): Promise<SheetRundown[]> {
+	async setDriveFolder(sheetFolderName: string): Promise<SheetRundown[]> {
 		this.sheetFolderName = sheetFolderName
 		return this.checkDriveFolder()
 	}
 
-	sendMediaViaGAPI (): Promise<void> {
+	async sendMediaViaGAPI(): Promise<void> {
 		// Create required updates
-		let updates: SheetUpdate[] = []
+		const updates: SheetUpdate[] = []
 		let cell = 2
-		for (let key in this._lastMedia) {
+		for (const key in this._lastMedia) {
 			// Media name.
 			updates.push({
 				value: this._lastMedia[key].path,
-				cellPosition: `E${cell}`
+				cellPosition: `E${cell}`,
 			})
 			// Media duration.
 			updates.push({
 				value: this._lastMedia[key].duration,
-				cellPosition: `F${cell}`
+				cellPosition: `F${cell}`,
 			})
 			cell++
 		}
 
 		// Update all running orders with media.
-		Object.keys(this.runningOrders).forEach(id => {
+		Object.keys(this.runningOrders).forEach((id) => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
 
 		return Promise.resolve()
 	}
 
-	sendOutputLayersViaGAPI (): Promise<void> {
+	async sendOutputLayersViaGAPI(): Promise<void> {
 		// Create reqrired updates
-		let updates: SheetUpdate[] = []
+		const updates: SheetUpdate[] = []
 
 		updates.push({
 			value: 'None',
-			cellPosition: `H2`
+			cellPosition: `H2`,
 		})
 
 		let cell = 3
-		for (let key in this._lastOutputLayers) {
+		for (const layer of this._lastOutputLayers) {
 			updates.push({
-				value: this._lastOutputLayers[key].name,
-				cellPosition: `H${cell}`
+				value: layer.name,
+				cellPosition: `H${cell}`,
 			})
 			cell++
 		}
 
 		// Update all running orders with outputLayers.
-		Object.keys(this.runningOrders).forEach(id => {
+		Object.keys(this.runningOrders).forEach((id) => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
 
 		return Promise.resolve()
 	}
 
-	sendTransitionsViaGAPI (workflow: WorkflowType): Promise<void> {
+	async sendTransitionsViaGAPI(workflow: WorkflowType): Promise<void> {
 		// Create reqrired updates
-		let updates: SheetUpdate[] = []
+		const updates: SheetUpdate[] = []
 		let cell = 2
 
 		if (workflow === 'VMIX') {
-			[
+			;[
 				'Cut',
 				'Fade',
 				'Zoom',
@@ -191,11 +203,11 @@ export class RunningOrderWatcher extends EventEmitter {
 				'WipeReverse',
 				'SlideReverse',
 				'VerticalWipeReverse',
-				'VerticalSlideReverse'
-			].forEach(transition => {
+				'VerticalSlideReverse',
+			].forEach((transition) => {
 				updates.push({
 					value: transition,
-					cellPosition: `J${cell}`
+					cellPosition: `J${cell}`,
 				})
 				cell++
 			})
@@ -203,20 +215,14 @@ export class RunningOrderWatcher extends EventEmitter {
 			for (let i = cell; i < 20; i++) {
 				updates.push({
 					value: '',
-					cellPosition: `J${cell}`
+					cellPosition: `J${cell}`,
 				})
 			}
 		} else {
-			[
-				'mix',
-				'cut',
-				'dip',
-				'sting',
-				'wipe'
-			].forEach(transition => {
+			;['mix', 'cut', 'dip', 'sting', 'wipe'].forEach((transition) => {
 				updates.push({
 					value: transition,
-					cellPosition: `J${cell}`
+					cellPosition: `J${cell}`,
 				})
 				cell++
 			})
@@ -224,25 +230,25 @@ export class RunningOrderWatcher extends EventEmitter {
 			for (let i = cell; i < 20; i++) {
 				updates.push({
 					value: '',
-					cellPosition: `J${cell}`
+					cellPosition: `J${cell}`,
 				})
 			}
 		}
 
 		// Update all running orders with outputLayers.
-		Object.keys(this.runningOrders).forEach(id => {
+		Object.keys(this.runningOrders).forEach((id) => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
 
 		return Promise.resolve()
 	}
 
-	sendObjectTypesViaGAPI (): Promise<void> {
+	async sendObjectTypesViaGAPI(): Promise<void> {
 		// Create reqrired updates
-		let updates: SheetUpdate[] = []
-		let cell = 2
+		const updates: SheetUpdate[] = []
+		const cell = 2
 
-		let objs = [
+		const objs = [
 			'camera',
 			'video',
 			'graphic',
@@ -252,53 +258,44 @@ export class RunningOrderWatcher extends EventEmitter {
 			'remote',
 			'pip',
 			'voiceover',
-			'script'
+			'script',
 		]
 
 		if (this.coreHandler.GetWorkflow() !== 'VMIX') {
 			objs.push('split')
 		}
 
-		objs.forEach(obj => {
+		objs.forEach((obj) => {
 			updates.push({
 				value: obj,
-				cellPosition: `C${cell}`
+				cellPosition: `C${cell}`,
 			})
 		})
 
 		// Update all running orders with outputLayers.
-		Object.keys(this.runningOrders).forEach(id => {
+		Object.keys(this.runningOrders).forEach((id) => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
 
 		return Promise.resolve()
 	}
 
-	sendTemplateTypesViaGAPI (): Promise<void> {
+	async sendTemplateTypesViaGAPI(): Promise<void> {
 		// Create reqrired updates
-		let updates: SheetUpdate[] = []
-		let cell = 2
+		const updates: SheetUpdate[] = []
+		const cell = 2
 
-		let objs = [
-			'FULL',
-			'HEAD',
-			'CAM',
-			'DVE',
-			'SECTION',
-			'TITLES',
-			'BREAKER',
-			'PACKAGE'
-		]
+		const objs = ['FULL', 'HEAD', 'CAM', 'DVE', 'SECTION', 'TITLES', 'BREAKER', 'PACKAGE']
 
-		objs.forEach(obj => {
+		objs.forEach((obj) => {
 			updates.push({
 				value: obj,
-				cellPosition: `A${cell}`
+				cellPosition: `A${cell}`,
 			})
 		})
 
 		// Update all running orders with outputLayers.
-		Object.keys(this.runningOrders).forEach(id => {
+		Object.keys(this.runningOrders).forEach((id) => {
 			this.sheetManager.updateSheetWithSheetUpdates(id, '_dataFromSofie', updates).catch(console.error)
 		})
 
@@ -308,20 +305,20 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Sends available media as CSV to a URL specified in .env
 	 */
-	sendMediaAsCSV (): Promise<void> {
+	async sendMediaAsCSV(): Promise<void> {
 		// Create required updates
-		let updates: { name: string, duration: string }[] = []
-		for (let key in this._lastMedia) {
+		const updates: { name: string; duration: string }[] = []
+		for (const key in this._lastMedia) {
 			updates.push({
 				name: this._lastMedia[key].name,
-				duration: this._lastMedia[key].duration
+				duration: this._lastMedia[key].duration,
 			})
 		}
 
 		// Convert the media list to xml.
-		function convertToCSV (updates: {name: string, duration: string}[]) {
+		function convertToCSV(updates: { name: string; duration: string }[]) {
 			let output = ''
-			updates.forEach(update => {
+			updates.forEach((update) => {
 				output += `${update.name},${update.duration}\n`
 			})
 			output = output.substring(0, output.length - 1)
@@ -329,25 +326,25 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 
 		if (process.env.MEDIA_URL) {
-			let req = request.post(process.env.MEDIA_URL, function (err) {
+			const req = request.post(process.env.MEDIA_URL, function (err) {
 				if (err) {
 					console.log(err)
 				}
 			})
-			let form = req.form()
+			const form = req.form()
 			form.append('file', convertToCSV(updates), {
 				filename: 'media.csv',
-				contentType: 'text/plain'
+				contentType: 'text/plain',
 			})
 		}
 
 		return Promise.resolve()
 	}
 
-	fillRundownData (): Promise<void> {
+	async fillRundownData(): Promise<void> {
 		this.sendMediaViaGAPI().catch(console.log)
 		this.sendOutputLayersViaGAPI().catch(console.log)
-		this.sendTransitionsViaGAPI(this._lastWorkflow).catch(console.log)
+		if (this._lastWorkflow) this.sendTransitionsViaGAPI(this._lastWorkflow).catch(console.log)
 		this.sendObjectTypesViaGAPI().catch(console.log)
 		this.sendTemplateTypesViaGAPI().catch(console.log)
 
@@ -357,8 +354,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Adds all available media to all running orders.
 	 */
-	updateAvailableMedia (): Promise<void> {
-		let newMedia = this.coreHandler.GetMedia()
+	async updateAvailableMedia(): Promise<void> {
+		const newMedia = this.coreHandler.GetMedia()
 
 		if (_.isEqual(this._lastMedia, newMedia)) {
 			// No need to update
@@ -380,8 +377,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Adds all all available outputs to all running orders.
 	 */
-	updateAvailableOutputs (): Promise<void> {
-		let outputLayers = this.coreHandler.GetOutputLayers()
+	async updateAvailableOutputs(): Promise<void> {
+		const outputLayers = this.coreHandler.GetOutputLayers()
 
 		if (_.isEqual(this._lastOutputLayers, outputLayers)) {
 			return Promise.resolve()
@@ -396,8 +393,8 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Adds all available transitions to all running orders.
 	 */
-	updateAvailableTransitions (): Promise<void> {
-		let workflow = this.coreHandler.GetWorkflow()
+	async updateAvailableTransitions(): Promise<void> {
+		const workflow = this.coreHandler.GetWorkflow()
 		if (this._lastWorkflow !== workflow) {
 			this._lastWorkflow = workflow
 
@@ -410,7 +407,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	/**
 	 * Start the watcher
 	 */
-	startWatcher () {
+	startWatcher(): void {
 		console.log('Starting Watcher')
 		this.stopWatcher()
 
@@ -421,14 +418,14 @@ export class RunningOrderWatcher extends EventEmitter {
 			// console.log('Running fast check')
 			this.currentlyChecking = true
 			this.checkForChanges()
-			.catch(error => {
-				console.error('Something went wrong during fast check', error, error.stack)
-			})
-			.then(() => {
-				// console.log('fast check done')
-				this.currentlyChecking = false
-			}).catch(console.error)
-
+				.catch((error) => {
+					console.error('Something went wrong during fast check', error, error.stack)
+				})
+				.then(() => {
+					// console.log('fast check done')
+					this.currentlyChecking = false
+				})
+				.catch(console.error)
 		}, this.pollIntervalFast)
 
 		this.slowinterval = setInterval(() => {
@@ -439,14 +436,14 @@ export class RunningOrderWatcher extends EventEmitter {
 			this.currentlyChecking = true
 
 			this.checkDriveFolder()
-			.catch(error => {
-				console.error('Something went wrong during slow check', error, error.stack)
-			})
-			.then(() => {
-				// console.log('slow check done')
-				this.currentlyChecking = false
-			}).catch(console.error)
-
+				.catch((error) => {
+					console.error('Something went wrong during slow check', error, error.stack)
+				})
+				.then(() => {
+					// console.log('slow check done')
+					this.currentlyChecking = false
+				})
+				.catch(console.error)
 		}, this.pollIntervalSlow)
 
 		this.mediaPollInterval = setInterval(() => {
@@ -455,34 +452,34 @@ export class RunningOrderWatcher extends EventEmitter {
 			}
 			this.currentlyChecking = true
 			this.updateAvailableMedia()
-			.catch(error => {
-				console.log('Something went wrong during siper slow check', error, error.stack)
-			})
-			.then(() => {
-				this.updateAvailableOutputs()
-				.catch(error => {
-					console.log('Something went wrong during super slow check', error, error.stack)
+				.catch((error) => {
+					console.log('Something went wrong during siper slow check', error, error.stack)
 				})
 				.then(() => {
-					this.updateAvailableTransitions()
-					.catch(error => {
-						console.log('Something went wrong during super slow check', error, error.stack)
-					})
-					.then(() => {
-						this.currentlyChecking = false
-					})
-					.catch(console.error)
+					this.updateAvailableOutputs()
+						.catch((error) => {
+							console.log('Something went wrong during super slow check', error, error.stack)
+						})
+						.then(() => {
+							this.updateAvailableTransitions()
+								.catch((error) => {
+									console.log('Something went wrong during super slow check', error, error.stack)
+								})
+								.then(() => {
+									this.currentlyChecking = false
+								})
+								.catch(console.error)
+						})
+						.catch(console.error)
 				})
 				.catch(console.error)
-			})
-			.catch(console.error)
 		}, this.pollIntervalMedia)
 	}
 
 	/**
 	 * Stop the watcher
 	 */
-	stopWatcher () {
+	stopWatcher(): void {
 		if (this.fastInterval) {
 			clearInterval(this.fastInterval)
 			this.fastInterval = undefined
@@ -496,26 +493,22 @@ export class RunningOrderWatcher extends EventEmitter {
 			this.mediaPollInterval = undefined
 		}
 	}
-	dispose () {
+	dispose(): void {
 		this.stopWatcher()
 	}
 
-	private processUpdatedRunningOrder (rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
-
+	private processUpdatedRunningOrder(rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
 		const oldRundown = !asNew && this.runningOrders[rundownId]
 
 		// Check if runningOrders have changed:
 
 		if (!rundown && oldRundown) {
 			this.emit('rundown_delete', rundownId)
-
 		} else if (rundown && !oldRundown) {
 			this.emit('rundown_create', rundownId, rundown)
 			this.fillRundownData().catch(console.error)
 		} else if (rundown && oldRundown) {
-
 			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
-
 				console.log(rundown.serialize()) // debug
 
 				this.emit('rundown_update', rundownId, rundown)
@@ -524,43 +517,42 @@ export class RunningOrderWatcher extends EventEmitter {
 
 				// Go through the sections for changes:
 				_.uniq(
-					oldRundown.segments.map(segment => segment.externalId).concat(
-					newRundown.segments.map(segment => segment.externalId))
+					oldRundown.segments
+						.map((segment) => segment.externalId)
+						.concat(newRundown.segments.map((segment) => segment.externalId))
 				).forEach((segmentId: string) => {
-					const oldSection: SheetSegment = oldRundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment // TODO: handle better
-					const newSection: SheetSegment = rundown.segments.find(segment => segment.externalId === segmentId) as SheetSegment
+					const oldSection: SheetSegment = oldRundown.segments.find(
+						(segment) => segment.externalId === segmentId
+					) as SheetSegment // TODO: handle better
+					const newSection: SheetSegment = rundown.segments.find(
+						(segment) => segment.externalId === segmentId
+					) as SheetSegment
 
 					if (!newSection && oldSection) {
 						this.emit('segment_delete', rundownId, segmentId)
 					} else if (newSection && !oldSection) {
 						this.emit('segment_create', rundownId, segmentId, newSection)
 					} else if (newSection && oldSection) {
-
 						if (!_.isEqual(newSection.serialize(), oldSection.serialize())) {
 							console.log(newSection.serialize(), oldSection.serialize()) // debug
 							this.emit('segment_update', rundownId, segmentId, newSection)
 						} else {
-
 							// Go through the stories for changes:
 							_.uniq(
-								oldSection.parts.map(part => part.externalId).concat(
-								newSection.parts.map(part => part.externalId))
+								oldSection.parts.map((part) => part.externalId).concat(newSection.parts.map((part) => part.externalId))
 							).forEach((storyId: string) => {
-
-								const oldStory: SheetPart = oldSection.parts.find(part => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
-								const newStory: SheetPart = newSection.parts.find(part => part.externalId === storyId) as SheetPart
+								const oldStory: SheetPart = oldSection.parts.find((part) => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
+								const newStory: SheetPart = newSection.parts.find((part) => part.externalId === storyId) as SheetPart
 
 								if (!newStory && oldStory) {
 									this.emit('part_delete', rundownId, segmentId, storyId)
 								} else if (newStory && !oldStory) {
 									this.emit('part_create', rundownId, segmentId, storyId, newStory)
 								} else if (newStory && oldStory) {
-
 									if (!_.isEqual(newStory.serialize(), oldStory.serialize())) {
 										console.log(newStory.serialize(), oldStory.serialize()) // debug
 										this.emit('part_update', rundownId, segmentId, storyId, newStory)
 									} else {
-
 										// At this point, we've determined that there are no changes.
 										// Do nothing
 									}
@@ -579,10 +571,10 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 	}
 
-	private async processChange (change: drive_v3.Schema$Change) {
+	private async processChange(change: drive_v3.Schema$Change) {
 		const fileId = change.fileId
 		if (fileId) {
-			let valid = await this.sheetManager.checkSheetIsValid(fileId)
+			const valid = await this.sheetManager.checkSheetIsValid(fileId)
 			if (valid) {
 				if (change.removed) {
 					// file was removed
@@ -590,10 +582,12 @@ export class RunningOrderWatcher extends EventEmitter {
 
 					this.processUpdatedRunningOrder(fileId, null)
 				} else {
-
 					// file was updated
 					console.log('Sheet was updated', fileId)
-					const newRunningOrder = await this.sheetManager.downloadRunningOrder(fileId, this.coreHandler.GetOutputLayers())
+					const newRunningOrder = await this.sheetManager.downloadRunningOrder(
+						fileId,
+						this.coreHandler.GetOutputLayers()
+					)
 
 					if (newRunningOrder.gatewayVersion === this.gatewayVersion) {
 						this.processUpdatedRunningOrder(fileId, newRunningOrder)
@@ -603,7 +597,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 	}
 
-	private async getPageToken (): Promise<string> {
+	private async getPageToken(): Promise<string> {
 		if (this.pageToken) {
 			return this.pageToken
 		}
@@ -614,19 +608,18 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 		return result.data.startPageToken
 	}
-	private async checkForChanges (): Promise<any> {
+	private async checkForChanges(): Promise<any> {
 		let pageToken: string | null | undefined = await this.getPageToken()
 
 		while (pageToken) {
-			const listData: GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
+			const listData: Common.GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
 				restrictToMyDrive: true,
 				pageToken: pageToken,
-				fields: '*'
+				fields: '*',
 			})
 
 			if (listData.data.changes) {
-				for (let key in listData.data.changes) {
-					let change = listData.data.changes[key]
+				for (const change of listData.data.changes) {
 					await this.processChange(change)
 				}
 			}

@@ -6,8 +6,8 @@ export interface Piece {
 	clipName: string
 	attributes: {
 		[key: string]: string
-	},
-	script?: string,
+	}
+	script?: string
 	transition?: string
 }
 export interface SheetsPiece extends Piece {
@@ -15,7 +15,7 @@ export interface SheetsPiece extends Piece {
 }
 
 export class SheetPiece implements Piece {
-	constructor (
+	constructor(
 		public id: string,
 		public objectType: string,
 		public objectTime: number,
@@ -27,5 +27,5 @@ export class SheetPiece implements Piece {
 		public position: string,
 		public script?: string,
 		public transition?: string
-	) { }
+	) {}
 }

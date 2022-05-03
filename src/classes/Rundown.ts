@@ -14,11 +14,11 @@ interface RundownMetaData {
 
 interface ParsedRow {
 	meta: {
-		rowPosition: number,
+		rowPosition: number
 		propColPosition: {
 			[attrName: string]: number
 		}
-	},
+	}
 	data: {
 		id?: string
 		name?: string
@@ -31,7 +31,7 @@ interface ParsedRow {
 		clipName?: string
 		feedback?: string
 		transition?: string
-		attributes?: {[key: string]: string}
+		attributes?: { [key: string]: string }
 	}
 }
 
@@ -55,7 +55,7 @@ export class SheetRundown implements Rundown {
 	// expectedStart: number // unix time
 	// expectedEnd: number // unix time
 	// sections: Section[] = []
-	constructor (
+	constructor(
 		public externalId: string,
 		public name: string,
 		public gatewayVersion: string,
@@ -64,28 +64,29 @@ export class SheetRundown implements Rundown {
 		public segments: SheetSegment[] = []
 	) {}
 
-	serialize (): Rundown {
+	serialize(): Rundown {
 		return {
-			externalId:				this.externalId,
-			name:			this.name,
-			expectedStart:	this.expectedStart,
-			expectedEnd:	this.expectedEnd
+			externalId: this.externalId,
+			name: this.name,
+			expectedStart: this.expectedStart,
+			expectedEnd: this.expectedEnd,
 		}
 	}
-	addSegments (segments: SheetSegment[]) {
-		segments.forEach(segment => this.segments.push(segment))
+	addSegments(segments: SheetSegment[]): void {
+		segments.forEach((segment) => this.segments.push(segment))
 	}
 
 	/**
 	 * Converts a 12/24 hour date string to a ShowTime
 	 * @param {string} timeString Time in the form `HH:MM:SS (AM|PM)`
 	 */
-	private static showTimeFromString (timeString: string): ShowTime {
-		let [time, mod] = timeString.split(' ')
-		let [hours, mins, seconds] = (time.includes('.')) ? time.split('.') : time.split(':')
+	private static showTimeFromString(timeString: string): ShowTime {
+		const [time, mod] = timeString.split(' ')
+		// eslint-disable-next-line prefer-const
+		let [hours, mins, seconds] = time.includes('.') ? time.split('.') : time.split(':')
 		let h: number
-		let m: number = Number(mins)
-		let s: number = Number(seconds)
+		const m = Number(mins)
+		const s = Number(seconds)
 
 		if (hours === '12') {
 			hours = '00'
@@ -97,13 +98,13 @@ export class SheetRundown implements Rundown {
 			h = parseInt(hours, 10)
 		}
 
-		let mil = 1000
+		const mil = 1000
 
 		return {
 			hour: h,
 			minute: m,
 			second: s,
-			millis: (s * mil) + (m * 60 * mil) + (h * 3600 * mil)
+			millis: s * mil + m * 60 * mil + h * 3600 * mil,
 		}
 	}
 
@@ -112,70 +113,83 @@ export class SheetRundown implements Rundown {
 	 * @param {string} startString Start time in the form `HH:MM:SS (AM|PM)`
 	 * @param {string} endString End time in the form `HH:MM:SS (AM|PM)`
 	 */
-	private static showTimesToMillis (startString: string, endString: string): [number, number] {
-		let startDay = new Date()
-		let endDay = new Date()
+	private static showTimesToMillis(startString: string, endString: string): [number, number] {
+		const startDay = new Date()
+		const endDay = new Date()
 
-		let startTime: ShowTime
-		let endTime: ShowTime
-
-		startTime = this.showTimeFromString(startString)
-		endTime = this.showTimeFromString(endString)
+		const startTime: ShowTime = this.showTimeFromString(startString)
+		const endTime: ShowTime = this.showTimeFromString(endString)
 
 		if (startTime.millis > endTime.millis) {
 			endDay.setDate(startDay.getDate() + 1)
 		}
 
 		// Assume the show is happening today
-		let targetStart = new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate(), startTime.hour, startTime.minute, startTime.second)
-		let targetEnd = new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate(), endTime.hour, endTime.minute, endTime.second)
-		return [
-			targetStart.getTime(),
-			targetEnd.getTime()
-		]
+		const targetStart = new Date(
+			startDay.getFullYear(),
+			startDay.getMonth(),
+			startDay.getDate(),
+			startTime.hour,
+			startTime.minute,
+			startTime.second
+		)
+		const targetEnd = new Date(
+			endDay.getFullYear(),
+			endDay.getMonth(),
+			endDay.getDate(),
+			endTime.hour,
+			endTime.minute,
+			endTime.second
+		)
+		return [targetStart.getTime(), targetEnd.getTime()]
 	}
 
-	private static getLayerByName (name: string, outputLayers: IOutputLayer[]): string {
+	private static getLayerByName(name: string, outputLayers: IOutputLayer[]): string {
 		let id = ''
-		outputLayers.forEach(layer => {
+		outputLayers.forEach((layer) => {
 			if (layer.name === name) id = layer._id
 		})
 
 		return id
 	}
 
-	private static parseRawData (cells: any[][], outputLayers: IOutputLayer[]): {rows: ParsedRow[], meta: RundownMetaData} {
-		let metaRow = cells[0] || []
-		let rundownStartTime = metaRow[2]
-		let rundownEndTime = metaRow[4]
-		let tablesRow = cells[1] || []
-		let tablePositions: any = {}
-		let inverseTablePositions: {[key: number]: string} = {}
+	private static parseRawData(
+		cells: any[][],
+		outputLayers: IOutputLayer[]
+	): { rows: ParsedRow[]; meta: RundownMetaData } {
+		const metaRow = cells[0] || []
+		const rundownStartTime = metaRow[2]
+		const rundownEndTime = metaRow[4]
+		const tablesRow = cells[1] || []
+		const tablePositions: any = {}
+		const inverseTablePositions: { [key: number]: string } = {}
 		tablesRow.forEach((cell, columnNumber) => {
 			if (typeof cell === 'string' && cell !== '') {
 				tablePositions[cell] = columnNumber
 				inverseTablePositions[columnNumber] = cell
 			}
 		})
-		let parsedRows: ParsedRow[] = []
+		const parsedRows: ParsedRow[] = []
 		for (let rowNumber = 3; rowNumber < cells.length; rowNumber++) {
-
-			let row = cells[rowNumber]
+			const row = cells[rowNumber]
 			if (row) {
-				let rowItem: ParsedRow = {
+				const rowItem: ParsedRow = {
 					meta: {
 						rowPosition: rowNumber,
-						propColPosition: {}
+						propColPosition: {},
 					},
 					data: {
-						float: 'FALSE'
-					}
+						float: 'FALSE',
+					},
 				}
 				let index = 0
 				row.forEach((cell, columnNumber) => {
 					const attr = inverseTablePositions[columnNumber]
 					rowItem.meta.propColPosition[attr] = columnNumber
-					if (cell === undefined || cell === '') { index++; return }
+					if (cell === undefined || cell === '') {
+						index++
+						return
+					}
 					switch (attr) {
 						case 'id':
 						case 'name':
@@ -216,29 +230,29 @@ export class SheetRundown implements Rundown {
 					index++
 				})
 
-				if (// Only add non-empty rows:
+				if (
+					// Only add non-empty rows:
 					rowItem.data.name ||
 					rowItem.data.type ||
 					rowItem.data.objectType
 				) {
 					parsedRows.push(rowItem)
 				}
-
 			}
 		}
 
-		let [parsedStartTime, parsedEndTime] = this.showTimesToMillis(rundownStartTime, rundownEndTime)
+		const [parsedStartTime, parsedEndTime] = this.showTimesToMillis(rundownStartTime, rundownEndTime)
 		return {
 			rows: parsedRows,
 			meta: {
 				version: metaRow[0].replace(/blueprint gateway /i, ''),
 				startTime: parsedStartTime, // runningOrderStartTime,
-				endTime: parsedEndTime // runningOrderEndTime
-			}
+				endTime: parsedEndTime, // runningOrderEndTime
+			},
 		}
 	}
 
-	static columnToLetter (columnOneIndexed: number): string {
+	static columnToLetter(columnOneIndexed: number): string {
 		let temp: number | undefined
 		let letter = ''
 		while (columnOneIndexed > 0) {
@@ -249,14 +263,17 @@ export class SheetRundown implements Rundown {
 		return letter
 	}
 
-	private static parsedRowsIntoSegments (sheetId: string, parsedRows: ParsedRow[]): {segments: SheetSegment[], sheetUpdates: SheetUpdate[]} {
-		let segments: SheetSegment[] = []
+	private static parsedRowsIntoSegments(
+		sheetId: string,
+		parsedRows: ParsedRow[]
+	): { segments: SheetSegment[]; sheetUpdates: SheetUpdate[] } {
+		const segments: SheetSegment[] = []
 		const implicitId = 'implicitFirst'
-		let segment = new SheetSegment(sheetId,implicitId, 0,'Implicit First Section', false)
+		let segment = new SheetSegment(sheetId, implicitId, 0, 'Implicit First Section', false)
 		let part: SheetPart | undefined
-		let sheetUpdates: SheetUpdate[] = []
+		const sheetUpdates: SheetUpdate[] = []
 
-		function timeFromRawData (time: string | undefined): number {
+		function timeFromRawData(time: string | undefined): number {
 			if (time === undefined) {
 				return 0
 			}
@@ -265,7 +282,7 @@ export class SheetRundown implements Rundown {
 
 			let parts: string[] = []
 
-			if (time.match(/^(\d{1,2}){1,2}([\.:]\d{1,2}){0,2}$/)) {
+			if (time.match(/^(\d{1,2}){1,2}([.:]\d{1,2}){0,2}$/)) {
 				if (time.indexOf(':') !== -1) {
 					parts = time.split(':')
 				} else {
@@ -273,7 +290,7 @@ export class SheetRundown implements Rundown {
 				}
 			} else if (time.match(/^(\d{1,2}){0,2}(\.\d{1,2}){0,2}(:(\d{1,3}))?$/)) {
 				if (time.indexOf(':') !== -1) {
-					let t = time.split(':')
+					const t = time.split(':')
 					time = t[0].replace('.', ':')
 					time += '.' + t[1]
 				}
@@ -284,9 +301,9 @@ export class SheetRundown implements Rundown {
 
 			parts = parts.reverse()
 
-			let ml = 1000
+			const ml = 1000
 
-			let multipliers: number[] = [ml, ml * 60, ml * 3600]
+			const multipliers: number[] = [ml, ml * 60, ml * 3600]
 			let duration = 0
 
 			for (let i = 0; i < parts.length; i++) {
@@ -305,7 +322,7 @@ export class SheetRundown implements Rundown {
 			return duration
 		}
 
-		function isAdlib (time: string | undefined): boolean {
+		function isAdlib(time: string | undefined): boolean {
 			if (!time) {
 				return true
 			}
@@ -313,18 +330,18 @@ export class SheetRundown implements Rundown {
 			return false
 		}
 
-		parsedRows.forEach(row => {
+		parsedRows.forEach((row) => {
 			let id = row.data.id
 			let currentSheetUpdate: SheetUpdate | undefined
 			if (!id) {
 				id = uuidV4()
 				// Update sheet with new ids
-				let rowPosition = row.meta.rowPosition + 1
-				let colPosition = this.columnToLetter(row.meta.propColPosition['id'] + 1)
+				const rowPosition = row.meta.rowPosition + 1
+				const colPosition = this.columnToLetter(row.meta.propColPosition['id'] + 1)
 
 				currentSheetUpdate = {
 					value: id,
-					cellPosition: colPosition + rowPosition
+					cellPosition: colPosition + rowPosition,
 				}
 			}
 			switch (row.data.type) {
@@ -347,17 +364,30 @@ export class SheetRundown implements Rundown {
 						currentSheetUpdate = undefined
 					} else {
 						if (row.data.objectType) {
-							let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
-							part.addPiece(new SheetPiece(id, row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA', row.data.script || '', row.data.transition || ''))
+							const attr = { ...(row.data.attributes || {}), ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+							part.addPiece(
+								new SheetPiece(
+									id,
+									row.data.objectType,
+									timeFromRawData(row.data.objectTime),
+									timeFromRawData(row.data.duration),
+									row.data.clipName || '',
+									attr,
+									'TBA',
+									row.data.script || '',
+									row.data.transition || ''
+								)
+							)
 						} else {
 							currentSheetUpdate = undefined
 						}
 					}
 					break
 				case 'SPLIT':
-					// Not sure what to do there
-					// For now; assuming this is a type of story
-					// break;
+				// Not sure what to do there
+				// For now; assuming this is a type of story
+				// break;
+				// eslint-disable-next-line no-fallthrough
 				default:
 					// It is likely a story
 					if (part) {
@@ -365,10 +395,28 @@ export class SheetRundown implements Rundown {
 						segment.addPart(part)
 						part = undefined
 					}
-					part = new SheetPart(row.data.type, segment.externalId, id, _.keys(segment.parts).length, row.data.name || '', row.data.float === 'TRUE', row.data.script || '')
+					part = new SheetPart(
+						row.data.type,
+						segment.externalId,
+						id,
+						_.keys(segment.parts).length,
+						row.data.name || '',
+						row.data.float === 'TRUE',
+						row.data.script || ''
+					)
 					if (row.data.objectType) {
-						let attr = { ...row.data.attributes || {}, ...{ adlib: isAdlib(row.data.objectTime).toString() } }
-						const firstItem = new SheetPiece(id + '_item', row.data.objectType, timeFromRawData(row.data.objectTime), timeFromRawData(row.data.duration), row.data.clipName || '', attr, 'TBA', '', row.data.transition || '')
+						const attr = { ...(row.data.attributes || {}), ...{ adlib: isAdlib(row.data.objectTime).toString() } }
+						const firstItem = new SheetPiece(
+							id + '_item',
+							row.data.objectType,
+							timeFromRawData(row.data.objectTime),
+							timeFromRawData(row.data.duration),
+							row.data.clipName || '',
+							attr,
+							'TBA',
+							'',
+							row.data.transition || ''
+						)
 						part.addPiece(firstItem)
 					}
 					// TODO: ID issue. We can probably do "id + `_item`, or some shit"
@@ -403,17 +451,29 @@ export class SheetRundown implements Rundown {
 	 * All following rows is one of the possible row types.
 	 */
 
-	 /**
-	  *
-	  * @param sheetId Id of the sheet
-	  * @param name Name of the sheet (often the title)
-	  * @param cells Cells of the sheet
-	  * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
-	  */
-	static fromSheetCells (sheetId: string, name: string, cells: any[][], outputLayers: IOutputLayer[], sheetManager?: SheetsManager): SheetRundown {
-		let parsedData = SheetRundown.parseRawData(cells, outputLayers)
-		let rundown = new SheetRundown(sheetId, name, parsedData.meta.version, parsedData.meta.startTime, parsedData.meta.endTime)
-		let results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
+	/**
+	 *
+	 * @param sheetId Id of the sheet
+	 * @param name Name of the sheet (often the title)
+	 * @param cells Cells of the sheet
+	 * @param sheetManager Optional; Will be used to update the sheet if changes, such as ID-updates, needs to be done.
+	 */
+	static fromSheetCells(
+		sheetId: string,
+		name: string,
+		cells: any[][],
+		outputLayers: IOutputLayer[],
+		sheetManager?: SheetsManager
+	): SheetRundown {
+		const parsedData = SheetRundown.parseRawData(cells, outputLayers)
+		const rundown = new SheetRundown(
+			sheetId,
+			name,
+			parsedData.meta.version,
+			parsedData.meta.startTime,
+			parsedData.meta.endTime
+		)
+		const results = SheetRundown.parsedRowsIntoSegments(sheetId, parsedData.rows)
 		rundown.addSegments(results.segments)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
