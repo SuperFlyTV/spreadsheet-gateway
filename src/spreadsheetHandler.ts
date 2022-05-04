@@ -138,7 +138,7 @@ export class SpreadsheetHandler {
 
 				// Here redirect_uri just needs to match what was sent previously to satisfy Google's security requirements
 				oAuth2Client.getToken(
-					{ code: authToken, redirect_uri: `${this._coreUrl?.toString()}/devices/${this._deviceId}/authResponse` },
+					{ code: authToken, redirect_uri: `${this._coreUrl?.toString()}/devices/${this._deviceId}/oauthResponse` },
 					(err, accessToken) => {
 						if (err) {
 							return reject(err)
@@ -369,7 +369,7 @@ export class SpreadsheetHandler {
 				access_type: 'offline',
 				scope: ACCESS_SCOPES,
 				prompt: 'consent',
-				redirect_uri: `${this._coreUrl.toString()}/devices/${this._deviceId}/authResponse`,
+				redirect_uri: `${this._coreUrl.toString()}/devices/${this._deviceId}/oauthResponse`,
 			})
 
 			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.
