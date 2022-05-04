@@ -6,6 +6,7 @@ import { Auth } from 'googleapis'
 import { CoreHandler } from './coreHandler'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
 import { mutateRundown, mutateSegment, mutatePart } from './mutate'
+import { StatusCode } from '@sofie-automation/blueprints-integration'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface SpreadsheetConfig {
@@ -63,13 +64,15 @@ export class SpreadsheetHandler {
 	private _coreHandler: CoreHandler
 	private _observers: Array<any> = []
 	private _triggerupdateDevicesTimeout: any = null
+	private _coreUrl: URL | undefined
+	private _deviceId: string | undefined
 
 	constructor(logger: winston.Logger, config: SpreadsheetConfig, coreHandler: CoreHandler) {
 		this._logger = logger
 		this.options = config
 		this._coreHandler = coreHandler
 
-		coreHandler.doReceiveAuthToken = async (authToken: string) => {
+		coreHandler.doReceiveAuthToken = async (authToken: string): Promise<void> => {
 			return this.receiveAuthToken(authToken)
 		}
 	}
@@ -133,21 +136,25 @@ export class SpreadsheetHandler {
 			if (this._currentOAuth2Client) {
 				const oAuth2Client = this._currentOAuth2Client
 
-				oAuth2Client.getToken(authToken, (err, accessToken) => {
-					if (err) {
-						return reject(err)
-					} else if (!accessToken) {
-						return reject(new Error('No accessToken received'))
-					} else {
-						oAuth2Client.setCredentials(accessToken)
-						this._currentOAuth2ClientAuthorized = true
+				// Here redirect_uri just needs to match what was sent previously to satisfy Google's security requirements
+				oAuth2Client.getToken(
+					{ code: authToken, redirect_uri: `${this._coreUrl?.toString()}/devices/${this._deviceId}/authResponse` },
+					(err, accessToken) => {
+						if (err) {
+							return reject(err)
+						} else if (!accessToken) {
+							return reject(new Error('No accessToken received'))
+						} else {
+							oAuth2Client.setCredentials(accessToken)
+							this._currentOAuth2ClientAuthorized = true
 
-						// Store for later use:
-						this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(this._logger.error)
+							// Store for later use:
+							this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(this._logger.error)
 
-						resolve()
+							resolve()
+						}
 					}
-				})
+				)
 			} else {
 				throw Error('No Authorization is currently in progress!')
 			}
@@ -352,10 +359,17 @@ export class SpreadsheetHandler {
 			// If we don't have an accessToken, request it from the user.
 			this._logger.info('Requesting auth token from user..')
 
+			if (!this._coreUrl) {
+				this._logger.error(`Core URL not set`)
+				this._coreHandler.setStatus(StatusCode.BAD, ['Core URL Not set on studio'])
+				return Promise.reject()
+			}
+
 			const authUrl = this._currentOAuth2Client.generateAuthUrl({
 				access_type: 'offline',
 				scope: ACCESS_SCOPES,
 				prompt: 'consent',
+				redirect_uri: `${this._coreUrl.toString()}/devices/${this._deviceId}/authResponse`,
 			})
 
 			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.
@@ -364,5 +378,13 @@ export class SpreadsheetHandler {
 				return Promise.resolve(null)
 			})
 		}
+	}
+
+	public setCoreUrl(url: URL): void {
+		this._coreUrl = url
+	}
+
+	public setDeviceId(id: string): void {
+		this._deviceId = id
 	}
 }
