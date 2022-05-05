@@ -12,7 +12,7 @@ import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
-import { IOutputLayer } from '@sofie-automation/blueprints-integration'
+import { IOutputLayer, StatusCode } from '@sofie-automation/blueprints-integration'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 import { SpreadsheetHandler } from './spreadsheetHandler'
 // import { STATUS_CODES } from 'http'
@@ -194,6 +194,7 @@ export class CoreHandler {
 		this._subscriptions = []
 
 		this.logger.info('Core: Setting up subscriptions for ' + this.core.deviceId + '..')
+		this._spreadsheetHandler?.setDeviceId(this.core.deviceId)
 		return Promise.all([
 			this.core.autoSubscribe('peripheralDevices', {
 				_id: this.core.deviceId,
@@ -282,6 +283,12 @@ export class CoreHandler {
 						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, getSnapshotResult])
 						break
 					}
+					case 'receiveAuthToken': {
+						const authTokenResult = await Promise.resolve(this.receiveAuthToken(cmd.args[0]))
+						success = true
+						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, authTokenResult])
+						break
+					}
 					default:
 						throw Error('Function "' + cmd.functionName + '" not found!')
 				}
@@ -302,7 +309,11 @@ export class CoreHandler {
 		console.log('received AuthToken', authToken)
 
 		if (this.doReceiveAuthToken) {
-			return this.doReceiveAuthToken(authToken)
+			try {
+				await this.doReceiveAuthToken(authToken)
+			} catch (e) {
+				this.setStatus(StatusCode.BAD, [`Failed to authenticate`, String(e)])
+			}
 		} else {
 			throw new Error('doReceiveAuthToken not set!')
 		}
@@ -453,19 +464,24 @@ export class CoreHandler {
 					}
 				})
 
-				const settings = studio['config'] as Array<{ _id: string; value: string | boolean }>
+				const settings: { [id: string]: string | boolean } | undefined = studio['blueprintConfig']
 				if (!settings) {
 					this._workflow = 'ATEM' // default
 				} else {
-					settings.forEach((setting) => {
-						if (setting._id.match(/^vmix$/i)) {
-							if (setting.value === true) {
+					for (const [id, value] of Object.entries(settings)) {
+						if (id.match(/^vmix$/i)) {
+							if (value === true) {
 								this._workflow = 'VMIX'
 							} else {
 								this._workflow = 'ATEM'
 							}
 						}
-					})
+					}
+				}
+
+				const sofieUrl = studio['settings']['sofieUrl'] as string | undefined
+				if (sofieUrl) {
+					this._spreadsheetHandler?.setCoreUrl(new URL(sofieUrl))
 				}
 			}
 		}
