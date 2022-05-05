@@ -1,6 +1,7 @@
 import { Connector, Config } from './connector'
 import * as winston from 'winston'
 import _ = require('underscore')
+import { logger } from './logger'
 
 // CLI arguments / Environment variables --------------
 let host: string = process.env.CORE_HOST || '127.0.0.1'
@@ -68,7 +69,6 @@ CLI                ENV
 }
 
 // Setup logging --------------------------------------
-const logger = winston.createLogger({})
 
 if (logPath) {
 	// Log json to file, human-readable to console
@@ -162,7 +162,7 @@ const config: Config = {
 	spreadsheet: {},
 }
 
-const c = new Connector(logger, config)
+const c = new Connector(config)
 
 logger.info('Core:          ' + config.core.host + ':' + config.core.port)
 // logger.info('My Mos id:     ' + config.mos.self.mosID)

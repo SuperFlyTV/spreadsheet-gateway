@@ -1,4 +1,3 @@
-import * as winston from 'winston'
 import { CollectionObj, PeripheralDeviceAPI as P } from '@sofie-automation/server-core-integration'
 import { google } from 'googleapis'
 import { Auth } from 'googleapis'
@@ -7,6 +6,7 @@ import { CoreHandler } from './coreHandler'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
 import { mutateRundown, mutateSegment, mutatePart } from './mutate'
 import { StatusCode } from '@sofie-automation/blueprints-integration'
+import { logger } from './logger'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface SpreadsheetConfig {
@@ -58,7 +58,6 @@ export class SpreadsheetHandler {
 	private _currentOAuth2Client: Auth.OAuth2Client | null = null
 	private _currentOAuth2ClientAuthorized = false
 
-	private _logger: winston.Logger
 	private _disposed = false
 	private _settings?: SpreadsheetDeviceSettings
 	private _coreHandler: CoreHandler
@@ -67,8 +66,7 @@ export class SpreadsheetHandler {
 	private _coreUrl: URL | undefined
 	private _deviceId: string | undefined
 
-	constructor(logger: winston.Logger, config: SpreadsheetConfig, coreHandler: CoreHandler) {
-		this._logger = logger
+	constructor(config: SpreadsheetConfig, coreHandler: CoreHandler) {
 		this.options = config
 		this._coreHandler = coreHandler
 
@@ -110,7 +108,7 @@ export class SpreadsheetHandler {
 			})
 			this._observers = []
 		}
-		this._logger.info('Renewing observers')
+		logger.info('Renewing observers')
 
 		const deviceObserver = this._coreHandler.core.observe('peripheralDevices')
 		deviceObserver.added = () => {
@@ -128,7 +126,7 @@ export class SpreadsheetHandler {
 	}
 	debugLog(msg: string, ...args: any[]): void {
 		if (this.debugLogging) {
-			this._logger.debug(msg, ...args)
+			logger.debug(msg, ...args)
 		}
 	}
 	async receiveAuthToken(authToken: string): Promise<void> {
@@ -149,7 +147,7 @@ export class SpreadsheetHandler {
 							this._currentOAuth2ClientAuthorized = true
 
 							// Store for later use:
-							this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(this._logger.error)
+							this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(logger.error)
 
 							resolve()
 						}
@@ -168,21 +166,21 @@ export class SpreadsheetHandler {
 		if (peripheralDevice) {
 			const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
 			if (this.debugLogging !== settings.debugLogging) {
-				this._logger.info('Changing debugLogging to ' + settings.debugLogging)
+				logger.info('Changing debugLogging to ' + settings.debugLogging)
 
 				this.debugLogging = settings.debugLogging
 
 				// this.spreadsheetWatcher.setDebug(settings.debugLogging)
 
 				if (settings.debugLogging) {
-					this._logger.level = 'debug'
+					logger.level = 'debug'
 				} else {
-					this._logger.level = 'info'
+					logger.level = 'info'
 				}
-				this._logger.info('log level ' + this._logger.level)
-				this._logger.info('test log info')
+				logger.info('log level ' + logger.level)
+				logger.info('test log info')
 				console.log('test console.log')
-				this._logger.debug('test log debug')
+				logger.debug('test log debug')
 			}
 		}
 		if (this._triggerupdateDevicesTimeout) {
@@ -190,7 +188,7 @@ export class SpreadsheetHandler {
 		}
 		this._triggerupdateDevicesTimeout = setTimeout(() => {
 			this._updateDevices().catch((e) => {
-				if (e) this._logger.error(e)
+				if (e) logger.error(e)
 			})
 		}, 20)
 	}
@@ -198,7 +196,7 @@ export class SpreadsheetHandler {
 		if (this._disposed) return Promise.resolve()
 		if (!this._settings) throw Error('Spreadsheet-Settings are not set')
 
-		this._logger.info('Initializing Spreadsheet connection...')
+		logger.info('Initializing Spreadsheet connection...')
 	}
 	private getThisPeripheralDevice(): CollectionObj | undefined {
 		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevices')
@@ -255,63 +253,61 @@ export class SpreadsheetHandler {
 
 						watcher
 							.on('info', (message: any) => {
-								this._logger.info(message)
+								logger.info(message)
 							})
 							.on('error', (error: any) => {
-								this._logger.error(error)
+								logger.error(error)
 							})
 							.on('warning', (warning: any) => {
-								this._logger.error(warning)
+								logger.error(warning)
 							})
 							// TODO - these event types should operate on the correct types and with better parameters
 							.on('rundown_delete', (rundownExternalId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownDelete, [rundownExternalId])
-									.catch(this._logger.error)
+								this._coreHandler.core.callMethod(P.methods.dataRundownDelete, [rundownExternalId]).catch(logger.error)
 							})
 							.on('rundown_create', (_rundownExternalId, rundown) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('rundown_update', (_rundownExternalId, rundown) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataRundownUpdate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('segment_delete', (rundownExternalId, sectionId) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataSegmentDelete, [rundownExternalId, sectionId])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('segment_create', (rundownExternalId, _sectionId, newSection) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('segment_update', (rundownExternalId, _sectionId, newSection) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('part_delete', (rundownExternalId, sectionId, storyId) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataPartDelete, [rundownExternalId, sectionId, storyId])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('part_create', (rundownExternalId, sectionId, _storyId, newStory) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 							.on('part_update', (rundownExternalId, sectionId, _storyId, newStory) => {
 								this._coreHandler.core
 									.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)])
-									.catch(this._logger.error)
+									.catch(logger.error)
 							})
 
 						if (settings.folderPath) {
-							this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
+							logger.info(`Starting watch of folder "${settings.folderPath}"`)
 							watcher
 								.setDriveFolder(settings.folderPath)
 								.then(() =>
@@ -357,10 +353,10 @@ export class SpreadsheetHandler {
 			return Promise.resolve(this._currentOAuth2Client)
 		} else {
 			// If we don't have an accessToken, request it from the user.
-			this._logger.info('Requesting auth token from user..')
+			logger.info('Requesting auth token from user..')
 
 			if (!this._coreUrl) {
-				this._logger.error(`Core URL not set`)
+				logger.error(`Core URL not set`)
 				this._coreHandler.setStatus(StatusCode.BAD, ['Core URL Not set on studio'])
 				return Promise.reject()
 			}
