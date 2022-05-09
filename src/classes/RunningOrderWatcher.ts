@@ -12,6 +12,8 @@ import * as clone from 'clone'
 import { CoreHandler, WorkflowType } from '../coreHandler'
 import { MediaDict } from './media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
+import { diffRundowns, RundownChangeType } from '../diffRundowns'
+import { assertUnreachable } from '../util'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -41,6 +43,25 @@ export class RunningOrderWatcher extends EventEmitter {
 			event: 'part_update',
 			listener: (runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => void
 		) => this)
+
+	emit!: ((event: 'info', message: string) => boolean) &
+		((event: 'error', error: any, stack?: any) => boolean) &
+		((event: 'warning', message: string) => boolean) &
+		((event: 'rundown_delete', runningOrderId: string) => boolean) &
+		((event: 'rundown_create', runningOrderId: string, runningOrder: SheetRundown) => boolean) &
+		((event: 'rundown_update', runningOrderId: string, runningOrder: SheetRundown) => boolean) &
+		((event: 'segment_delete', runningOrderId: string, sectionId: string) => boolean) &
+		((event: 'segment_create', runningOrderId: string, sectionId: string, newSection: SheetSegment) => boolean) &
+		((event: 'segment_update', runningOrderId: string, sectionId: string, newSection: SheetSegment) => boolean) &
+		((event: 'part_delete', runningOrderId: string, sectionId: string, storyId: string) => boolean) &
+		((
+			event: 'part_create',
+			runningOrderId: string,
+			sectionId: string,
+			storyId: string,
+			newStory: SheetPart
+		) => boolean) &
+		((event: 'part_update', runningOrderId: string, sectionId: string, storyId: string, newStory: SheetPart) => boolean)
 
 	// Fast = list diffs, Slow = fetch All
 	public pollIntervalFast: number = 2 * 1000
@@ -498,71 +519,68 @@ export class RunningOrderWatcher extends EventEmitter {
 	}
 
 	private processUpdatedRunningOrder(rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
-		const oldRundown = !asNew && this.runningOrders[rundownId]
+		const oldRundown = !asNew ? this.runningOrders[rundownId] : null
 
 		// Check if runningOrders have changed:
-
-		if (!rundown && oldRundown) {
-			this.emit('rundown_delete', rundownId)
-		} else if (rundown && !oldRundown) {
-			this.emit('rundown_create', rundownId, rundown)
-			this.fillRundownData().catch(console.error)
-		} else if (rundown && oldRundown) {
-			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
-				console.log(rundown.serialize()) // debug
-
-				this.emit('rundown_update', rundownId, rundown)
-			} else {
-				const newRundown: SheetRundown = rundown
-
-				// Go through the sections for changes:
-				_.uniq(
-					oldRundown.segments
-						.map((segment) => segment.externalId)
-						.concat(newRundown.segments.map((segment) => segment.externalId))
-				).forEach((segmentId: string) => {
-					const oldSection: SheetSegment = oldRundown.segments.find(
-						(segment) => segment.externalId === segmentId
-					) as SheetSegment // TODO: handle better
-					const newSection: SheetSegment = rundown.segments.find(
-						(segment) => segment.externalId === segmentId
-					) as SheetSegment
-
-					if (!newSection && oldSection) {
-						this.emit('segment_delete', rundownId, segmentId)
-					} else if (newSection && !oldSection) {
-						this.emit('segment_create', rundownId, segmentId, newSection)
-					} else if (newSection && oldSection) {
-						if (!_.isEqual(newSection.serialize(), oldSection.serialize())) {
-							console.log(newSection.serialize(), oldSection.serialize()) // debug
-							this.emit('segment_update', rundownId, segmentId, newSection)
-						} else {
-							// Go through the stories for changes:
-							_.uniq(
-								oldSection.parts.map((part) => part.externalId).concat(newSection.parts.map((part) => part.externalId))
-							).forEach((storyId: string) => {
-								const oldStory: SheetPart = oldSection.parts.find((part) => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
-								const newStory: SheetPart = newSection.parts.find((part) => part.externalId === storyId) as SheetPart
-
-								if (!newStory && oldStory) {
-									this.emit('part_delete', rundownId, segmentId, storyId)
-								} else if (newStory && !oldStory) {
-									this.emit('part_create', rundownId, segmentId, storyId, newStory)
-								} else if (newStory && oldStory) {
-									if (!_.isEqual(newStory.serialize(), oldStory.serialize())) {
-										console.log(newStory.serialize(), oldStory.serialize()) // debug
-										this.emit('part_update', rundownId, segmentId, storyId, newStory)
-									} else {
-										// At this point, we've determined that there are no changes.
-										// Do nothing
-									}
-								}
-							})
-						}
-					}
-				})
+		const changes = diffRundowns(oldRundown, rundown)
+		for (const change of changes) {
+			const changeType = change.type
+			switch (changeType) {
+				case RundownChangeType.RundownCreate: {
+					if (rundown === null) throw new Error(`Tried to emit RUNDOWN_CREATE for Rundown that does not exist`)
+					this.emit('rundown_create', change.rundownId, rundown)
+					break
+				}
+				case RundownChangeType.RundownDelete: {
+					this.emit('rundown_delete', change.rundownId)
+					break
+				}
+				case RundownChangeType.RundownUpdate: {
+					if (rundown === null) throw new Error(`Tried to emit RUNDOWN_UPDATE for Rundown that does not exist`)
+					this.emit('rundown_update', change.rundownId, rundown)
+					break
+				}
+				case RundownChangeType.SegmentCreate: {
+					const segment = rundown?.segments.find((s) => s.externalId === change.segmentId)
+					if (!segment) throw new Error(`Tried to emit SEGMENT_CREATE for Segment that does not exist`)
+					this.emit('segment_create', change.rundownId, change.segmentId, segment)
+					break
+				}
+				case RundownChangeType.SegmentDelete: {
+					this.emit('segment_delete', change.rundownId, change.segmentId)
+					break
+				}
+				case RundownChangeType.SegmentUpdate: {
+					const segment = rundown?.segments.find((s) => s.externalId === change.segmentId)
+					if (!segment) throw new Error(`Tried to emit SEGMENT_UPDATE for Segment that does not exist`)
+					this.emit('segment_update', change.rundownId, change.segmentId, segment)
+					break
+				}
+				case RundownChangeType.PartCreate: {
+					const segment = rundown?.segments.find((s) => s.externalId === change.segmentId)
+					if (!segment) throw new Error(`Tried to emit PART_CREATE for Part in Segment that does not exist`)
+					const part = segment.parts.find((s) => s.externalId === change.segmentId)
+					if (!part) throw new Error(`Tried to emit PART_CREATE for Part that does not exist`)
+					this.emit('part_create', change.rundownId, change.segmentId, change.partId, part)
+					break
+				}
+				case RundownChangeType.PartDelete: {
+					this.emit('part_delete', change.rundownId, change.segmentId, change.partId)
+					break
+				}
+				case RundownChangeType.PartUpdate: {
+					const segment = rundown?.segments.find((s) => s.externalId === change.segmentId)
+					if (!segment) throw new Error(`Tried to emit PART_UPDATE for Part in Segment that does not exist`)
+					const part = segment.parts.find((s) => s.externalId === change.segmentId)
+					if (!part) throw new Error(`Tried to emit PART_UPDATE for Part that does not exist`)
+					this.emit('part_update', change.rundownId, change.segmentId, change.partId, part)
+					break
+				}
+				default:
+					throw assertUnreachable(changeType, new Error(`Unhandled change type: ${changeType}`))
 			}
 		}
+
 		// Update the stored data:
 		if (rundown) {
 			this.runningOrders[rundownId] = clone(rundown)

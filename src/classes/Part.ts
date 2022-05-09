@@ -1,5 +1,4 @@
 import { Piece, SheetPiece } from './Piece'
-// import { hasChangeType } from './hasChangeType';
 
 export interface Part {
 	segmentId: string
@@ -35,7 +34,6 @@ export class SheetPart implements Part {
 			name: this.name,
 			float: this.float,
 			script: this.script,
-			pieces: this.pieces,
 		}
 	}
 	addPieces(piece: SheetPiece[]): void {
