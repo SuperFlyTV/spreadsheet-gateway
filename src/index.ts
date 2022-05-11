@@ -1,6 +1,5 @@
 import { Connector, Config } from './connector'
 import * as winston from 'winston'
-import _ = require('underscore')
 import { logger } from './logger'
 
 // CLI arguments / Environment variables --------------
@@ -35,7 +34,7 @@ process.argv.forEach((val) => {
 	} else if ((val + ' ').match(/-h(elp)? /i)) {
 		printHelp = true
 	} else if (prevProcessArg.match(/-certificates/i)) {
-		certs.push(val)
+		if (val) certs.push(val)
 		nextPrevProcessArg = prevProcessArg // so that we can get multiple certificates
 
 		// arguments with no options:
@@ -148,7 +147,7 @@ logger.info('-----------------------------------')
 const config: Config = {
 	process: {
 		unsafeSSL: unsafeSSL,
-		certificates: _.compact(certs),
+		certificates: certs,
 	},
 	device: {
 		deviceId: deviceId,

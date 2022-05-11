@@ -7,8 +7,6 @@ import {
 import * as fs from 'fs'
 import { Process } from './process'
 
-import * as _ from 'underscore'
-
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
 import { IOutputLayer, StatusCode } from '@sofie-automation/blueprints-integration'
@@ -574,7 +572,7 @@ export class CoreHandler {
 		]
 		try {
 			const nodeModulesDirectories = fs.readdirSync('node_modules')
-			_.each(nodeModulesDirectories, (dir) => {
+			for (const dir of nodeModulesDirectories) {
 				try {
 					if (dirNames.indexOf(dir) !== -1) {
 						let file = 'node_modules/' + dir + '/package.json'
@@ -585,7 +583,7 @@ export class CoreHandler {
 				} catch (e) {
 					logger.error(e)
 				}
-			})
+			}
 		} catch (e) {
 			logger.error(e)
 		}

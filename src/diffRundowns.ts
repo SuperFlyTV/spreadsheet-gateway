@@ -1,4 +1,4 @@
-import * as _ from 'underscore'
+import { isDeepStrictEqual } from 'util'
 import { SheetRundown } from './classes/Rundown'
 
 export enum RundownChangeType {
@@ -104,7 +104,7 @@ export function diffRundowns(oldRundown: SheetRundown | null, newRundown: SheetR
 		return []
 	}
 
-	if (!_.isEqual(oldRundown.serialize(), newRundown.serialize())) {
+	if (!isDeepStrictEqual(oldRundown.serialize(), newRundown.serialize())) {
 		changes.push({
 			type: RundownChangeType.RundownUpdate,
 			rundownId: newRundown.externalId,
@@ -137,7 +137,7 @@ export function diffRundowns(oldRundown: SheetRundown | null, newRundown: SheetR
 			continue
 		}
 
-		if (!_.isEqual(newSegment.serialize(), oldSegment.serialize())) {
+		if (!isDeepStrictEqual(newSegment.serialize(), oldSegment.serialize())) {
 			changes.push({
 				type: RundownChangeType.SegmentUpdate,
 				rundownId,
@@ -171,7 +171,7 @@ export function diffRundowns(oldRundown: SheetRundown | null, newRundown: SheetR
 				continue
 			}
 
-			if (!_.isEqual(newPart.serialize(), oldPart.serialize())) {
+			if (!isDeepStrictEqual(newPart.serialize(), oldPart.serialize())) {
 				changes.push({
 					type: RundownChangeType.PartUpdate,
 					rundownId,

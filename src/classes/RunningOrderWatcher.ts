@@ -5,7 +5,6 @@ import { SheetRundown } from './Rundown'
 import { Auth, Common } from 'googleapis'
 import { google, drive_v3 } from 'googleapis'
 import { SheetsManager, SheetUpdate } from './SheetManager'
-import * as _ from 'underscore'
 import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import * as clone from 'clone'
@@ -14,6 +13,7 @@ import { MediaDict } from './media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 import { diffRundowns, RundownChangeType } from '../diffRundowns'
 import { assertUnreachable } from '../util'
+import { isDeepStrictEqual } from 'util'
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -378,7 +378,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	async updateAvailableMedia(): Promise<void> {
 		const newMedia = this.coreHandler.GetMedia()
 
-		if (_.isEqual(this._lastMedia, newMedia)) {
+		if (isDeepStrictEqual(this._lastMedia, newMedia)) {
 			// No need to update
 			return Promise.resolve()
 		}
@@ -401,7 +401,7 @@ export class RunningOrderWatcher extends EventEmitter {
 	async updateAvailableOutputs(): Promise<void> {
 		const outputLayers = this.coreHandler.GetOutputLayers()
 
-		if (_.isEqual(this._lastOutputLayers, outputLayers)) {
+		if (isDeepStrictEqual(this._lastOutputLayers, outputLayers)) {
 			return Promise.resolve()
 		}
 		this._lastOutputLayers = outputLayers

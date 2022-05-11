@@ -3,7 +3,6 @@ import { SheetSegment } from './Segment'
 import { SheetPart } from './Part'
 import { SheetPiece } from './Piece'
 import { SheetUpdate, SheetsManager } from './SheetManager'
-import * as _ from 'underscore'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 
 interface RundownMetaData {
@@ -350,7 +349,7 @@ export class SheetRundown implements Rundown {
 						segment.addPart(part)
 						part = undefined
 					}
-					if (!(segment.externalId === implicitId && _.keys(segment.parts).length === 0)) {
+					if (!(segment.externalId === implicitId && segment.parts.length === 0)) {
 						segments.push(segment)
 					}
 
@@ -399,7 +398,7 @@ export class SheetRundown implements Rundown {
 						row.data.type,
 						segment.externalId,
 						id,
-						_.keys(segment.parts).length,
+						segment.parts.length,
 						row.data.name || '',
 						row.data.float === 'TRUE',
 						row.data.script || ''
