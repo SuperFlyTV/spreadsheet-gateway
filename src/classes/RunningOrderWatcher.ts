@@ -522,7 +522,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		const oldRundown = !asNew ? this.runningOrders[rundownId] : null
 
 		// Check if runningOrders have changed:
-		const changes = diffRundowns(oldRundown, rundown)
+		const changes = diffRundowns(oldRundown ?? null, rundown)
 		for (const change of changes) {
 			const changeType = change.type
 			switch (changeType) {
