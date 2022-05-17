@@ -571,7 +571,7 @@ export class RunningOrderWatcher extends EventEmitter {
 				case RundownChangeType.PartUpdate: {
 					const segment = rundown?.segments.find((s) => s.externalId === change.segmentId)
 					if (!segment) throw new Error(`Tried to emit PART_UPDATE for Part in Segment that does not exist`)
-					const part = segment.parts.find((s) => s.externalId === change.segmentId)
+					const part = segment.parts.find((s) => s.externalId === change.partId)
 					if (!part) throw new Error(`Tried to emit PART_UPDATE for Part that does not exist`)
 					this.emit('part_update', change.rundownId, change.segmentId, change.partId, part)
 					break
