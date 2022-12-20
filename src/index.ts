@@ -1,6 +1,5 @@
-import { Connector, Config } from './connector'
-import * as winston from 'winston'
-import _ = require('underscore')
+import { Config, Connector } from './connector'
+import { logger, addConsoleLogging, addFileLogging } from './logger'
 
 // CLI arguments / Environment variables --------------
 let host: string = process.env.CORE_HOST || '127.0.0.1'
@@ -10,7 +9,7 @@ let deviceId: string = process.env.DEVICE_ID || ''
 let deviceToken: string = process.env.DEVICE_TOKEN || ''
 let disableWatchdog: boolean = process.env.DISABLE_WATCHDOG === '1' || false
 let unsafeSSL: boolean = process.env.UNSAFE_SSL === '1' || false
-const certs: string[] = (process.env.CERTIFICATES || '').split(';') || []
+const certs: string[] = process.env.CERTIFICATES?.split(';') || []
 let debug = false
 let printHelp = false
 
@@ -34,7 +33,7 @@ process.argv.forEach((val) => {
 	} else if ((val + ' ').match(/-h(elp)? /i)) {
 		printHelp = true
 	} else if (prevProcessArg.match(/-certificates/i)) {
-		certs.push(val)
+		if (val) certs.push(val)
 		nextPrevProcessArg = prevProcessArg // so that we can get multiple certificates
 
 		// arguments with no options:
@@ -68,56 +67,13 @@ CLI                ENV
 }
 
 // Setup logging --------------------------------------
-const logger = winston.createLogger({})
-
 if (logPath) {
 	// Log json to file, human-readable to console
 	console.log('Logging to', logPath)
-	logger.add(
-		new winston.transports.Console({
-			level: 'verbose',
-			handleExceptions: true,
-			format: winston.format.simple(),
-		})
-	)
-	logger.add(
-		new winston.transports.File({
-			level: 'debug',
-			handleExceptions: true,
-			format: winston.format.json({ circularValue: null }),
-			filename: logPath,
-		})
-	)
-	// Hijack console.log:
-	const orgConsoleLog = console.log
-	console.log = function (...args: any[]) {
-		if (args.length >= 1) {
-			try {
-				logger.debug(args.join(' '))
-			} catch (e) {
-				orgConsoleLog('CATCH')
-				orgConsoleLog(...args)
-				throw e
-			}
-			orgConsoleLog(...args)
-		}
-	}
+	addFileLogging(logPath)
 } else {
 	console.log('Logging to Console')
-	// Log json to console
-	logger.add(
-		new winston.transports.Console({
-			// level: 'verbose',
-			handleExceptions: true,
-			format: winston.format.json({ circularValue: null }),
-		})
-	)
-	// Hijack console.log:
-	console.log = function (...args: any[]) {
-		if (args.length >= 1) {
-			logger.debug(args.join(' '))
-		}
-	}
+	addConsoleLogging()
 }
 
 // Because the default NodeJS-handler sucks and wont display error properly
@@ -128,7 +84,6 @@ process.on('warning', (e: any) => {
 	logger.warn('Unhandled warning:', e, e.reason || e.message, e.stack)
 })
 
-logger.info('------------------------------------------------------------------')
 logger.info('-----------------------------------')
 logger.info('Statup options:')
 
@@ -148,7 +103,7 @@ logger.info('-----------------------------------')
 const config: Config = {
 	process: {
 		unsafeSSL: unsafeSSL,
-		certificates: _.compact(certs),
+		certificates: certs,
 	},
 	device: {
 		deviceId: deviceId,
@@ -162,15 +117,8 @@ const config: Config = {
 	spreadsheet: {},
 }
 
-const c = new Connector(logger, config)
+const c = new Connector(config)
 
-logger.info('Core:          ' + config.core.host + ':' + config.core.port)
-// logger.info('My Mos id:     ' + config.mos.self.mosID)
-// config.mos.devices.forEach((device) => {
-// 	if (device.primary) logger.info('Mos Primary:   ' + device.primary.host)
-// 	if (device.secondary) logger.info('Mos Secondary: ' + device.secondary.host)
-// })
-logger.info('------------------------------------------------------------------')
+logger.info('Core:          ' + config.core.host + ':' + config.core.port + '      ')
+logger.info('-----------------------------------')
 c.init().catch(logger.error)
-
-// @todo: remove this line of comment

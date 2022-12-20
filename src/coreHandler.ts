@@ -1,21 +1,23 @@
-import {
-	CoreConnection,
-	CoreOptions,
-	PeripheralDeviceAPI as P,
-	DDPConnectorOptions,
-} from '@sofie-automation/server-core-integration'
-import * as winston from 'winston'
+import { CoreConnection, CoreOptions, DDPConnectorOptions } from '@sofie-automation/server-core-integration'
 import * as fs from 'fs'
 import { Process } from './process'
-
-import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
+import { StatusCode } from '@sofie-automation/shared-lib/dist/lib/status'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 import { SpreadsheetHandler } from './spreadsheetHandler'
-// import { STATUS_CODES } from 'http'
+import { logger } from './logger'
+import { protectString, unprotectString } from '@sofie-automation/shared-lib/dist/lib/protectedString'
+import { PeripheralDeviceId } from '@sofie-automation/shared-lib/dist/core/model/Ids'
+import {
+	PeripheralDeviceCategory,
+	PeripheralDeviceType,
+	PERIPHERAL_SUBTYPE_PROCESS,
+} from '@sofie-automation/shared-lib/dist/peripheralDevice/peripheralDeviceAPI'
+import { PeripheralDeviceAPIMethods } from '@sofie-automation/shared-lib/dist/peripheralDevice/methodsAPI'
+
 export interface PeripheralDeviceCommand {
 	_id: string
 
@@ -42,7 +44,6 @@ export class CoreHandler {
 	public core: CoreConnection
 	public doReceiveAuthToken?: (authToken: string) => Promise<any>
 
-	private logger: winston.Logger
 	private _observers: Array<any> = []
 	private _onConnected?: () => any
 	private _subscriptions: Array<any> = []
@@ -56,8 +57,7 @@ export class CoreHandler {
 	private _workflow: WorkflowType
 	private _spreadsheetHandler: SpreadsheetHandler | undefined
 
-	constructor(logger: winston.Logger, deviceOptions: DeviceConfig) {
-		this.logger = logger
+	constructor(deviceOptions: DeviceConfig) {
 		this._workflow = 'ATEM'
 		this.core = new CoreConnection(this.getCoreConnectionOptions(deviceOptions, 'Spreadsheet Gateway'))
 	}
@@ -75,14 +75,14 @@ export class CoreHandler {
 		this._spreadsheetHandler = spreadsheetHandler
 
 		this.core.onConnected(() => {
-			this.logger.info('Core Connected!')
+			logger.info('Core Connected!')
 			if (this._isInitialized) this.onConnectionRestored()
 		})
 		this.core.onDisconnected(() => {
-			this.logger.info('Core Disconnected!')
+			logger.info('Core Disconnected!')
 		})
 		this.core.onError((err) => {
-			this.logger.error('Core Error: ' + (err.message || err.toString() || err))
+			logger.error('Core Error: ' + (err.toString() || err))
 		})
 
 		const ddpConfig: DDPConnectorOptions = {
@@ -99,10 +99,10 @@ export class CoreHandler {
 			.then((_id: string) => {
 				this.core
 					.setStatus({
-						statusCode: P.StatusCode.UNKNOWN,
+						statusCode: StatusCode.UNKNOWN,
 						messages: ['Starting up'],
 					})
-					.catch((e) => this.logger.warn('Error when setting status:' + e))
+					.catch((e) => logger.warn('Error when setting status:' + e))
 				// nothing
 			})
 			.then(async () => {
@@ -112,10 +112,11 @@ export class CoreHandler {
 				this._isInitialized = true
 			})
 	}
+
 	async dispose(): Promise<void> {
 		return this.core
 			.setStatus({
-				statusCode: P.StatusCode.FATAL,
+				statusCode: StatusCode.FATAL,
 				messages: ['Shutting down'],
 			})
 			.then(async () => {
@@ -125,40 +126,41 @@ export class CoreHandler {
 				// nothing
 			})
 	}
-	setStatus(statusCode: P.StatusCode, messages: string[]): void {
+
+	setStatus(statusCode: StatusCode, messages: string[]): void {
 		this.core
 			.setStatus({
 				statusCode: statusCode,
 				messages: messages,
 			})
-			.catch((e) => this.logger.warn('Error when setting status:' + e))
+			.catch((e) => logger.warn('Error when setting status:' + e))
 	}
+
 	getCoreConnectionOptions(deviceOptions: DeviceConfig, name: string): CoreOptions {
 		let credentials: {
-			deviceId: string
+			deviceId: PeripheralDeviceId
 			deviceToken: string
 		}
 
 		if (deviceOptions.deviceId && deviceOptions.deviceToken) {
 			credentials = {
-				deviceId: deviceOptions.deviceId,
+				deviceId: protectString(deviceOptions.deviceId),
 				deviceToken: deviceOptions.deviceToken,
 			}
-		} else if (deviceOptions.deviceId) {
-			this.logger.warn('Token not set, only id! This might be unsecure!')
+		} else {
+			logger.warn('Token not set, only id! This might be unsecure!')
 			credentials = {
-				deviceId: deviceOptions.deviceId + name,
+				deviceId: protectString(deviceOptions.deviceId + name),
 				deviceToken: 'unsecureToken',
 			}
-		} else {
-			credentials = CoreConnection.getCredentials(name.replace(/ /g, ''))
 		}
+
 		const options: CoreOptions = {
 			...credentials,
 
-			deviceCategory: P.DeviceCategory.INGEST,
-			deviceType: P.DeviceType.SPREADSHEET,
-			deviceSubType: P.SUBTYPE_PROCESS,
+			deviceCategory: PeripheralDeviceCategory.INGEST,
+			deviceType: PeripheralDeviceType.SPREADSHEET,
+			deviceSubType: PERIPHERAL_SUBTYPE_PROCESS,
 
 			deviceName: name,
 			watchDog: this._coreConfig ? this._coreConfig.watchdog : true,
@@ -168,24 +170,27 @@ export class CoreHandler {
 		options.versions = this._getVersions()
 		return options
 	}
+
 	onConnectionRestored(): void {
 		this.setupSubscriptionsAndObservers().catch((e) => {
-			this.logger.error(e)
+			logger.error(e)
 		})
 		if (this._onConnected) this._onConnected()
 		// this._coreMosHandlers.forEach((cmh: CoreMosDeviceHandler) => {
 		// 	cmh.setupSubscriptionsAndObservers()
 		// })
 	}
+
 	onConnected(fcn: () => any): void {
 		this._onConnected = fcn
 	}
+
 	/**
 	 * Subscribes to events in the core.
 	 */
 	async setupSubscriptionsAndObservers(): Promise<void> {
 		if (this._observers.length) {
-			this.logger.info('Core: Clearing observers..')
+			logger.info('Core: Clearing observers..')
 			this._observers.forEach((obs) => {
 				obs.stop()
 			})
@@ -193,7 +198,8 @@ export class CoreHandler {
 		}
 		this._subscriptions = []
 
-		this.logger.info('Core: Setting up subscriptions for ' + this.core.deviceId + '..')
+		logger.info('Core: Setting up subscriptions for ' + this.core.deviceId + '..')
+		this._spreadsheetHandler?.setDeviceId(unprotectString(this.core.deviceId))
 		return Promise.all([
 			this.core.autoSubscribe('peripheralDevices', {
 				_id: this.core.deviceId,
@@ -226,6 +232,7 @@ export class CoreHandler {
 			return
 		})
 	}
+
 	/**
 	 * Subscribes to the 'showStyleBases' collection.
 	 * @param studioId The studio the showstyles belong to.
@@ -246,7 +253,7 @@ export class CoreHandler {
 	async executeFunction(cmd: PeripheralDeviceCommand): Promise<void> {
 		if (cmd) {
 			if (this._executedFunctions[cmd._id]) return // prevent it from running multiple times
-			this.logger.debug(cmd.functionName, cmd.args)
+			logger.debug(cmd.functionName, cmd.args)
 			this._executedFunctions[cmd._id] = true
 			let success = false
 
@@ -255,54 +262,72 @@ export class CoreHandler {
 					case 'triggerReloadRundown': {
 						const reloadRundownResult = await Promise.resolve(this.triggerReloadRundown(cmd.args[0]))
 						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, reloadRundownResult])
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [cmd._id, null, reloadRundownResult])
 						break
 					}
 					case 'pingResponse': {
 						const pingResponseResult = await Promise.resolve(this.pingResponse(cmd.args[0]))
 						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, pingResponseResult])
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [cmd._id, null, pingResponseResult])
 						break
 					}
 					case 'retireExecuteFunction': {
 						const retireExecuteFunctionResult = await Promise.resolve(this.retireExecuteFunction(cmd.args[0]))
 						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, retireExecuteFunctionResult])
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [
+							cmd._id,
+							null,
+							retireExecuteFunctionResult,
+						])
 						break
 					}
 					case 'killProcess': {
 						const killProcessFunctionResult = await Promise.resolve(this.killProcess(cmd.args[0]))
 						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, killProcessFunctionResult])
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [
+							cmd._id,
+							null,
+							killProcessFunctionResult,
+						])
 						break
 					}
 					case 'getSnapshot': {
 						const getSnapshotResult = await Promise.resolve(this.getSnapshot())
 						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, getSnapshotResult])
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [cmd._id, null, getSnapshotResult])
+						break
+					}
+					case 'receiveAuthToken': {
+						const authTokenResult = await Promise.resolve(this.receiveAuthToken(cmd.args[0]))
+						success = true
+						await this.core.callMethod(PeripheralDeviceAPIMethods.functionReply, [cmd._id, null, authTokenResult])
 						break
 					}
 					default:
 						throw Error('Function "' + cmd.functionName + '" not found!')
 				}
 			} catch (err) {
-				this.logger.error(`executeFunction error ${success ? 'during execution' : 'on reply'}`, err, (err as any).stack)
+				logger.error(`executeFunction error ${success ? 'during execution' : 'on reply'}`, err, (err as any).stack)
 				if (!success) {
 					await this.core
-						.callMethod(P.methods.functionReply, [cmd._id, (err as any).toString(), null])
-						.catch((e) => this.logger.error('executeFunction reply error after execution failure', e, e.stack))
+						.callMethod(PeripheralDeviceAPIMethods.functionReply, [cmd._id, (err as any).toString(), null])
+						.catch((e) => logger.error('executeFunction reply error after execution failure', e, e.stack))
 				}
 			}
 		}
 	}
+
 	retireExecuteFunction(cmdId: string): void {
 		delete this._executedFunctions[cmdId]
 	}
-	async receiveAuthToken(authToken: string): Promise<void> {
-		console.log('received AuthToken', authToken)
 
+	async receiveAuthToken(authToken: string): Promise<void> {
 		if (this.doReceiveAuthToken) {
-			return this.doReceiveAuthToken(authToken)
+			try {
+				await this.doReceiveAuthToken(authToken)
+			} catch (e) {
+				this.setStatus(StatusCode.BAD, [`Failed to authenticate`, String(e)])
+			}
 		} else {
 			throw new Error('doReceiveAuthToken not set!')
 		}
@@ -325,7 +350,7 @@ export class CoreHandler {
 			if (!cmds) throw Error('"peripheralDeviceCommands" collection not found!')
 			const cmd = cmds.findOne(id) as PeripheralDeviceCommand
 			if (!cmd) throw Error('PeripheralCommand "' + id + '" not found!')
-			if (cmd.deviceId === this.core.deviceId) {
+			if (cmd.deviceId === unprotectString(this.core.deviceId)) {
 				void this.executeFunction(cmd)
 			}
 		}
@@ -342,11 +367,12 @@ export class CoreHandler {
 		if (!cmds) throw Error('"peripheralDeviceCommands" collection not found!')
 		cmds.find({}).forEach((cmd0) => {
 			const cmd = cmd0 as PeripheralDeviceCommand
-			if (cmd.deviceId === this.core.deviceId) {
+			if (cmd.deviceId === unprotectString(this.core.deviceId)) {
 				void this.executeFunction(cmd)
 			}
 		})
 	}
+
 	/**
 	 * Subscribes to changes to media objects to populate spreadsheet data.
 	 */
@@ -423,6 +449,7 @@ export class CoreHandler {
 			constructMediaObject(file)
 		})
 	}
+
 	setupObserverForShowStyleBases(): void {
 		const observerStyles = this.core.observe('showStyleBases')
 		this.killProcess(false)
@@ -453,19 +480,24 @@ export class CoreHandler {
 					}
 				})
 
-				const settings = studio['config'] as Array<{ _id: string; value: string | boolean }>
+				const settings: { [id: string]: string | boolean } | undefined = studio['blueprintConfig']
 				if (!settings) {
 					this._workflow = 'ATEM' // default
 				} else {
-					settings.forEach((setting) => {
-						if (setting._id.match(/^vmix$/i)) {
-							if (setting.value === true) {
+					for (const [id, value] of Object.entries(settings)) {
+						if (id.match(/^vmix$/i)) {
+							if (value === true) {
 								this._workflow = 'VMIX'
 							} else {
 								this._workflow = 'ATEM'
 							}
 						}
-					})
+					}
+				}
+
+				const sofieUrl = studio['settings']['sofieUrl'] as string | undefined
+				if (sofieUrl) {
+					this._spreadsheetHandler?.setCoreUrl(new URL(sofieUrl))
 				}
 			}
 		}
@@ -480,6 +512,7 @@ export class CoreHandler {
 
 		addedChanged()
 	}
+
 	/**
 	 * Subscribes to changes to the device to get its associated studio ID.
 	 */
@@ -503,11 +536,11 @@ export class CoreHandler {
 					if (this._studioId) {
 						// Subscribe to mediaObjects collection.
 						this.setupSubscriptionForMediaObjects(this._studioId).catch((er) => {
-							this.logger.error(er)
+							logger.error(er)
 						})
 
 						this.setupSubscriptionForShowStyleBases().catch((er) => {
-							this.logger.error(er)
+							logger.error(er)
 						})
 					}
 				}
@@ -523,11 +556,12 @@ export class CoreHandler {
 			addedChanged(id)
 		}
 
-		addedChanged(this.core.deviceId)
+		addedChanged(unprotectString(this.core.deviceId))
 	}
+
 	killProcess(actually: boolean): boolean {
 		if (actually) {
-			this.logger.info('KillProcess command received, shutting down in 1000ms!')
+			logger.info('KillProcess command received, shutting down in 1000ms!')
 			setTimeout(() => {
 				// eslint-disable-next-line no-process-exit
 				process.exit(0)
@@ -536,17 +570,21 @@ export class CoreHandler {
 		}
 		return false
 	}
+
 	triggerReloadRundown(rundownId: string): void {
 		this._spreadsheetHandler?.triggerReloadRundown(rundownId)
 	}
+
 	pingResponse(message: string): boolean {
 		this.core.setPingResponse(message)
 		return true
 	}
+
 	getSnapshot(): any {
-		this.logger.info('getSnapshot')
+		logger.info('getSnapshot')
 		return {} // TODO: send some snapshot data?
 	}
+
 	private _getVersions() {
 		const versions: { [packageName: string]: string } = {}
 
@@ -560,7 +598,7 @@ export class CoreHandler {
 		]
 		try {
 			const nodeModulesDirectories = fs.readdirSync('node_modules')
-			_.each(nodeModulesDirectories, (dir) => {
+			for (const dir of nodeModulesDirectories) {
 				try {
 					if (dirNames.indexOf(dir) !== -1) {
 						let file = 'node_modules/' + dir + '/package.json'
@@ -569,11 +607,11 @@ export class CoreHandler {
 						versions[dir] = json.version || 'N/A'
 					}
 				} catch (e) {
-					this.logger.error(e)
+					logger.error(e)
 				}
-			})
+			}
 		} catch (e) {
-			this.logger.error(e)
+			logger.error(e)
 		}
 		return versions
 	}

@@ -1,7 +1,9 @@
-import { Auth, Common, google, sheets_v4 } from 'googleapis'
-import { SheetRundown } from './Rundown'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
-const sheets = google.sheets('v4')
+import { Auth, Common, google, sheets_v4 } from 'googleapis'
+import { logger } from '../logger'
+import { getErrorMsg } from '../util'
+import { SheetRundown } from './Rundown'
+const sheets = google.sheets({ version: 'v4', timeout: 5000 })
 const drive = google.drive('v3')
 
 const SHEET_NAME = process.env.SHEET_NAME || 'Rundown'
@@ -11,10 +13,14 @@ export interface SheetUpdate {
 	cellPosition: string
 }
 
+export interface SplittedSheets {
+	mainSheet: sheets_v4.Schema$ValueRange | undefined
+}
+
 export class SheetsManager {
 	private currentFolder = ''
 
-	constructor(private auth: Auth.OAuth2Client) {}
+	constructor(private _oAuth2Client: Auth.OAuth2Client) {}
 
 	/**
 	 * Creates a Google Sheets api-specific change element
@@ -30,53 +36,77 @@ export class SheetsManager {
 		}
 	}
 
-	/**
-	 * Downloads and parses a Running Order for google sheets
-	 *
-	 * @param rundownSheetId Id of the google sheet containing the Running Order
-	 */
-	async downloadRunningOrder(rundownSheetId: string, outputLayers: IOutputLayer[]): Promise<SheetRundown> {
-		return this.downloadSheet(rundownSheetId).then((data) => {
-			const runningOrderTitle = data.meta.properties ? data.meta.properties.title || 'unknown' : 'unknown'
-			return SheetRundown.fromSheetCells(
-				rundownSheetId,
-				runningOrderTitle,
-				data.values.values || [],
-				outputLayers,
-				this
-			)
+	async downloadRundown(spreadsheetId: string, outputLayers: IOutputLayer[]): Promise<SheetRundown | undefined> {
+		try {
+			const downloadedSpreadsheet = await this.fetchSpreadsheetSheets(spreadsheetId)
+
+			if (!downloadedSpreadsheet) {
+				return undefined
+			}
+
+			const downloadedMainSheet = downloadedSpreadsheet?.mainSheet
+			if (!downloadedMainSheet) {
+				logger.warn(`Rundown main sheet is undefined`)
+				return undefined
+			}
+
+			return SheetRundown.fromSheetCells(spreadsheetId, SHEET_NAME, downloadedMainSheet.values || [], outputLayers)
+		} catch (error) {
+			logger.error(`Error while downloading rundown`)
+			logger.debug(error)
+			return undefined
+		}
+	}
+
+	async fetchSpreadsheetFromServer(
+		spreadsheetId: string
+	): Promise<Common.GaxiosResponse<sheets_v4.Schema$BatchGetValuesResponse>> {
+		const res = await sheets.spreadsheets.values.batchGet({
+			spreadsheetId,
+			ranges: [SHEET_NAME],
+			auth: this._oAuth2Client,
 		})
+		return res
 	}
 
 	/**
-	 * Downloads raw data from google spreadsheets
-	 *
-	 * @param spreadsheetId Id of the google spreadsheet to download
+	 * Method downloads specific Google spreadsheet document
+	 * @param spreadsheetId Id of the Google spreadsheet to download
+	 * @returns Object containing all splitted sheets
 	 */
-	async downloadSheet(spreadsheetId: string): Promise<{
-		meta: sheets_v4.Schema$Spreadsheet
-		values: sheets_v4.Schema$ValueRange
-	}> {
-		const request = {
-			// The spreadsheet to request.
-			auth: this.auth,
-			spreadsheetId,
-			// The ranges to retrieve from the spreadsheet.
-			range: SHEET_NAME, // Get all cells in Rundown sheet
+	async fetchSpreadsheetSheets(spreadsheetId: string): Promise<SplittedSheets | undefined> {
+		try {
+			const res = await this.fetchSpreadsheetFromServer(spreadsheetId)
+			return this.splitSheets(res)
+		} catch (error) {
+			logger.error(`Error while executing batch get for spreadsheet ${spreadsheetId}: ${getErrorMsg(error)}`)
+			logger.debug(error)
+			return undefined
 		}
-		return Promise.all([
-			sheets.spreadsheets.get({
-				auth: this.auth,
-				spreadsheetId,
-				fields: 'spreadsheetId,properties.title',
-			}),
-			sheets.spreadsheets.values.get(request),
-		]).then(([meta, values]) => {
-			return {
-				meta: meta.data,
-				values: values.data,
+	}
+
+	splitSheets(response: Common.GaxiosResponse<sheets_v4.Schema$BatchGetValuesResponse>): SplittedSheets {
+		return {
+			mainSheet: this.extractSheet(response.data.valueRanges || [], SHEET_NAME),
+		}
+	}
+
+	/**
+	 * Helper method that extracts specific sheet from the array of downloaded sheets.
+	 * @param sheetValueRanges Array of downloaded ranges
+	 * @param sheetName Name of the sheet that should be returned
+	 * @returns Sheet value range of the desired sheet
+	 */
+	extractSheet(
+		sheetValueRanges: sheets_v4.Schema$ValueRange[],
+		sheetName: string
+	): sheets_v4.Schema$ValueRange | undefined {
+		for (const sheetValueRange of sheetValueRanges) {
+			if (sheetValueRange.range?.includes(sheetName)) {
+				return sheetValueRange
 			}
-		})
+		}
+		return undefined
 	}
 
 	/**
@@ -104,21 +134,30 @@ export class SheetsManager {
 	 */
 	async updateSheet(
 		spreadsheetId: string,
-		sheetUpdates: sheets_v4.Schema$ValueRange[]
+		_sheetUpdates: sheets_v4.Schema$ValueRange[]
 	): Promise<Common.GaxiosResponse<sheets_v4.Schema$BatchUpdateValuesResponse>> {
 		const request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
 			spreadsheetId: spreadsheetId,
 			requestBody: {
 				valueInputOption: 'RAW',
-				data: sheetUpdates,
-				// [{
-				//     range: 'A1:A1',
-				//     values: [[1]]
-				// }]
 			},
-			auth: this.auth,
+			auth: this._oAuth2Client,
 		}
 		return sheets.spreadsheets.values.batchUpdate(request)
+
+		// const request: sheets_v4.Params$Resource$Spreadsheets$Values$Batchupdate = {
+		// 	spreadsheetId: spreadsheetId,
+		// 	requestBody: {
+		// 		valueInputOption: 'RAW',
+		// 		data: sheetUpdates,
+		// 		// [{
+		// 		//     range: 'A1:A1',
+		// 		//     values: [[1]]
+		// 		// }]
+		// 	},
+		// 	auth: this.auth,
+		// }
+		// return sheets.spreadsheets.values.batchUpdate(request)
 	}
 
 	/**
@@ -127,8 +166,8 @@ export class SheetsManager {
 	 *
 	 * @param folderName Name of Google Drive folder
 	 */
-	async getSheetsInDriveFolder(folderName: string): Promise<string[]> {
-		const drive = google.drive({ version: 'v3', auth: this.auth })
+	async getSpreadsheetsInDriveFolder(folderName: string): Promise<string[]> {
+		const drive = google.drive({ version: 'v3', auth: this._oAuth2Client })
 
 		const fileList = await drive.files.list({
 			// q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
@@ -137,10 +176,12 @@ export class SheetsManager {
 			spaces: 'drive',
 			fields: 'nextPageToken, files(*)',
 		})
+
 		// Use first hit only. We assume that that would be the correct folder.
 		// If you have multiple folders with the same name, it will become un-deterministic
 		if (fileList.data.files && fileList.data.files[0] && fileList.data.files[0].id) {
-			return this.getSheetsInDriveFolderId(fileList.data.files[0].id)
+			const folderId = fileList.data.files[0].id
+			return this.getSpreadsheetsInDriveFolderId(folderId)
 		} else {
 			return []
 		}
@@ -151,35 +192,31 @@ export class SheetsManager {
 	 * @param folderId Id of Google Drive folder to retrieve spreadsheets from
 	 * @param nextPageToken Google drive nextPageToken pagination token.
 	 */
-	async getSheetsInDriveFolderId(folderId: string, nextPageToken?: string): Promise<string[]> {
-		const drive = google.drive({ version: 'v3', auth: this.auth })
-
+	async getSpreadsheetsInDriveFolderId(folderId: string, nextPageToken?: string): Promise<string[]> {
+		const drive = google.drive({ version: 'v3', auth: this._oAuth2Client })
 		this.currentFolder = folderId
 
-		const fileList = await drive.files.list({
-			q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
-			spaces: 'drive',
-			fields: 'nextPageToken, files(*)',
-			pageToken: nextPageToken,
-		})
-
-		const resultData = (fileList.data.files || [])
-			.filter((file) => {
-				if (file.name && file.name[0] !== '_' && !file.trashed) {
-					return file.id
-				}
-				return
-			})
-			.map((file) => {
-				return file.id || ''
+		try {
+			const fileList = await drive.files.list({
+				q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents`,
+				// q: `mimeType='application/vnd.google-apps.spreadsheet'`,
+				spaces: 'drive',
+				fields: 'nextPageToken, files(*)',
+				pageToken: nextPageToken,
 			})
 
-		if (fileList.data.nextPageToken) {
-			const result = await this.getSheetsInDriveFolderId(folderId, fileList.data.nextPageToken)
+			const resultDataFileIds = (fileList.data.files || [])
+				.filter((file) => file.name && file.name[0] !== '_' && !file.trashed)
+				.map((file) => file.id || '')
 
-			return resultData.concat(result)
-		} else {
-			return resultData
+			if (fileList.data.nextPageToken) {
+				const nextPageDataFileIds = await this.getSpreadsheetsInDriveFolderId(folderId, fileList.data.nextPageToken)
+				return resultDataFileIds.concat(nextPageDataFileIds)
+			}
+			return resultDataFileIds
+		} catch (error) {
+			console.log('Error while fetching spreadsheets from folder', JSON.stringify(error))
+			return []
 		}
 	}
 
@@ -191,7 +228,7 @@ export class SheetsManager {
 		const spreadsheet = await sheets.spreadsheets
 			.get({
 				spreadsheetId: sheetid,
-				auth: this.auth,
+				auth: this._oAuth2Client,
 			})
 			.catch(console.error)
 
@@ -203,7 +240,7 @@ export class SheetsManager {
 			.get({
 				fileId: sheetid,
 				fields: 'parents',
-				auth: this.auth,
+				auth: this._oAuth2Client,
 			})
 			.catch(console.error)
 

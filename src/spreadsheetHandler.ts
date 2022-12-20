@@ -1,17 +1,19 @@
-import * as winston from 'winston'
-import { CollectionObj, PeripheralDeviceAPI as P } from '@sofie-automation/server-core-integration'
-import { google } from 'googleapis'
-import { Auth } from 'googleapis'
-
-import { CoreHandler } from './coreHandler'
+import { CollectionObj } from '@sofie-automation/server-core-integration'
+import { StatusCode } from '@sofie-automation/shared-lib/dist/lib/status'
+import { PeripheralDeviceAPIMethods } from '@sofie-automation/shared-lib/dist/peripheralDevice/methodsAPI'
+import { Auth, google } from 'googleapis'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
-import { mutateRundown, mutateSegment, mutatePart } from './mutate'
+import { CoreHandler } from './coreHandler'
+import { logger } from './logger'
+import { mutatePart, mutateRundown, mutateSegment } from './mutate'
+import { checkErrorType, getErrorMsg } from './util'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface SpreadsheetConfig {
 	// Todo: add settings here?
 	// self: IConnectionConfig
 }
+
 export interface SpreadsheetDeviceSettings {
 	/** Path / Name to the Drive folder */
 	folderPath: string
@@ -21,6 +23,7 @@ export interface SpreadsheetDeviceSettings {
 	secretCredentials: boolean
 	secretAccessToken: boolean
 }
+
 export interface SpreadsheetDeviceSecretSettings {
 	credentials?: Credentials
 	accessToken?: AccessToken
@@ -48,50 +51,40 @@ export interface AccessToken {
 const ACCESS_SCOPES = ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/spreadsheets']
 
 export class SpreadsheetHandler {
-	public options: SpreadsheetConfig
+	// public options: SpreadsheetConfig
 	public debugLogging = false
 
 	private spreadsheetWatcher?: RunningOrderWatcher
-	// private allMosDevices: {[id: string]: IMOSDevice} = {}
-	// private _ownMosDevices: {[deviceId: string]: MosDevice} = {}
 	private _currentOAuth2Client: Auth.OAuth2Client | null = null
-	private _currentOAuth2ClientAuthorized = false
 
-	private _logger: winston.Logger
 	private _disposed = false
 	private _settings?: SpreadsheetDeviceSettings
 	private _coreHandler: CoreHandler
 	private _observers: Array<any> = []
-	private _triggerupdateDevicesTimeout: any = null
+	private _triggerUpdateDevicesTimeout: any = null
+	private _coreUrl: URL | undefined
+	private _deviceId: string | undefined
 
-	constructor(logger: winston.Logger, config: SpreadsheetConfig, coreHandler: CoreHandler) {
-		this._logger = logger
-		this.options = config
+	constructor(_config: SpreadsheetConfig, coreHandler: CoreHandler) {
+		// this.options = config
 		this._coreHandler = coreHandler
 
-		coreHandler.doReceiveAuthToken = async (authToken: string) => {
+		coreHandler.doReceiveAuthToken = async (authToken: string): Promise<void> => {
 			return this.receiveAuthToken(authToken)
 		}
 	}
+
 	async init(coreHandler: CoreHandler): Promise<void> {
-		return coreHandler.core
-			.getPeripheralDevice()
-			.then(async (peripheralDevice: any) => {
-				this._settings = peripheralDevice.settings || {}
+		const peripheralDevice = await coreHandler.core.getPeripheralDevice()
 
-				return this._initSpreadsheetConnection()
-			})
-			.then(async () => {
-				this._coreHandler.onConnected(() => {
-					this.setupObservers()
-				})
-				this.setupObservers()
+		this._settings = peripheralDevice.settings || {}
 
-				return this._updateDevices().catch((e) => {
-					if (e) throw e // otherwise just swallow it
-				})
-			})
+		this._coreHandler.onConnected(() => this.setupObservers())
+		this.setupObservers()
+
+		await this._updateThisDevice()
 	}
+
 	async dispose(): Promise<void> {
 		this._disposed = true
 		if (this.spreadsheetWatcher) {
@@ -100,6 +93,25 @@ export class SpreadsheetHandler {
 			return Promise.resolve()
 		}
 	}
+
+	/**
+	 * Method disposes spreadsheet watcher.
+	 * Should be called when the minimum conditions are not met
+	 * (missing acces token, auth token, auth client, folder path...)
+	 */
+	private disposeSpreadsheetWatcher(): void {
+		if (!this.spreadsheetWatcher) {
+			return
+		}
+
+		this.spreadsheetWatcher.dispose()
+		delete this.spreadsheetWatcher
+	}
+
+	/**
+	 * Method initializes observers for changed to Sofie peripheral device.
+	 * For example, when some of the settings change for this gateway app.
+	 */
 	setupObservers(): void {
 		if (this._observers.length) {
 			this._observers.forEach((obs) => {
@@ -107,7 +119,7 @@ export class SpreadsheetHandler {
 			})
 			this._observers = []
 		}
-		this._logger.info('Renewing observers')
+		logger.info('Renewing observers')
 
 		const deviceObserver = this._coreHandler.core.observe('peripheralDevices')
 		deviceObserver.added = () => {
@@ -123,246 +135,295 @@ export class SpreadsheetHandler {
 
 		this._deviceOptionsChanged()
 	}
-	debugLog(msg: string, ...args: any[]): void {
-		if (this.debugLogging) {
-			this._logger.debug(msg, ...args)
-		}
-	}
-	async receiveAuthToken(authToken: string): Promise<void> {
-		return new Promise((resolve, reject) => {
-			if (this._currentOAuth2Client) {
-				const oAuth2Client = this._currentOAuth2Client
 
-				oAuth2Client.getToken(authToken, (err, accessToken) => {
-					if (err) {
-						return reject(err)
-					} else if (!accessToken) {
-						return reject(new Error('No accessToken received'))
-					} else {
-						oAuth2Client.setCredentials(accessToken)
-						this._currentOAuth2ClientAuthorized = true
-
-						// Store for later use:
-						this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(this._logger.error)
-
-						resolve()
-					}
-				})
-			} else {
-				throw Error('No Authorization is currently in progress!')
-			}
-		})
+	/**
+	 * Method returns Spreadsheet Gateway as a Sofie core peripheral device
+	 * @returns Spreadsheet Gateway as a Sofie core peripheral device
+	 */
+	private getThisPeripheralDevice(): CollectionObj | undefined {
+		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevices')
+		return peripheralDevices.findOne(this._coreHandler.core.deviceId)
 	}
-	triggerReloadRundown(rundownId: string): void {
-		void this.spreadsheetWatcher?.checkRunningOrderById(rundownId, true)
-	}
+
+	/**
+	 * Method invoked when Spreadsheet Gateway settings change in the Sofie
+	 */
 	private _deviceOptionsChanged() {
 		const peripheralDevice = this.getThisPeripheralDevice()
 		if (peripheralDevice) {
 			const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
 			if (this.debugLogging !== settings.debugLogging) {
-				this._logger.info('Changing debugLogging to ' + settings.debugLogging)
+				logger.info('Changing debugLogging to ' + settings.debugLogging)
 
 				this.debugLogging = settings.debugLogging
-
 				// this.spreadsheetWatcher.setDebug(settings.debugLogging)
 
 				if (settings.debugLogging) {
-					this._logger.level = 'debug'
+					logger.level = 'debug'
 				} else {
-					this._logger.level = 'info'
+					logger.level = 'info'
 				}
-				this._logger.info('log level ' + this._logger.level)
-				this._logger.info('test log info')
-				console.log('test console.log')
-				this._logger.debug('test log debug')
 			}
 		}
-		if (this._triggerupdateDevicesTimeout) {
-			clearTimeout(this._triggerupdateDevicesTimeout)
+		if (this._triggerUpdateDevicesTimeout) {
+			clearTimeout(this._triggerUpdateDevicesTimeout)
 		}
-		this._triggerupdateDevicesTimeout = setTimeout(() => {
-			this._updateDevices().catch((e) => {
-				if (e) this._logger.error(e)
+		this._triggerUpdateDevicesTimeout = setTimeout(() => {
+			this._updateThisDevice().catch((error) => {
+				logger.error(`Something went wrong wile updating this device`, error)
 			})
 		}, 20)
 	}
-	private async _initSpreadsheetConnection(): Promise<void> {
-		if (this._disposed) return Promise.resolve()
-		if (!this._settings) throw Error('Spreadsheet-Settings are not set')
 
-		this._logger.info('Initializing Spreadsheet connection...')
-	}
-	private getThisPeripheralDevice(): CollectionObj | undefined {
-		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevices')
-		return peripheralDevices.findOne(this._coreHandler.core.deviceId)
-	}
-	private async _updateDevices(): Promise<void> {
-		if (this._disposed) return Promise.resolve()
-		return (!this.spreadsheetWatcher ? this._initSpreadsheetConnection() : Promise.resolve())
-			.then(async () => {
-				const peripheralDevice = this.getThisPeripheralDevice()
+	/**
+	 * Method invoked when some of the settings related to the Spreadsheet Gateway change.
+	 * For example, update gateway status, check credentials etc.
+	 */
+	private async _updateThisDevice(): Promise<void> {
+		if (this._disposed) {
+			return
+		}
 
-				if (peripheralDevice) {
-					const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
-					const secretSettings: SpreadsheetDeviceSecretSettings = peripheralDevice.secretSettings || {}
+		const peripheralDevice = this.getThisPeripheralDevice() // This gateway app as Sofie peripheral device
+		if (!peripheralDevice) {
+			return
+		}
 
-					if (!secretSettings.credentials) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: Credentials missing'])
-						return
-					}
+		const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
+		const secretSettings: SpreadsheetDeviceSecretSettings = peripheralDevice.secretSettings || {}
 
-					const credentials = secretSettings.credentials
-					const accessToken = secretSettings.accessToken
+		if (!secretSettings.credentials) {
+			this.disposeSpreadsheetWatcher()
+			this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: Credentials missing'])
+			return
+		}
 
-					const authClient = await this.createAuthClient(credentials, accessToken)
+		const credentials = secretSettings.credentials
+		const accessToken = secretSettings.accessToken
 
-					if (!secretSettings.accessToken) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: AccessToken missing'])
-						return
-					}
+		const authClient = await this.createAuthClient(credentials, accessToken)
 
-					if (!authClient) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Internal error: authClient not set'])
-						return
-					}
+		if (!secretSettings.accessToken) {
+			this.disposeSpreadsheetWatcher()
+			this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: AccessToken missing'])
+			return
+		}
 
-					if (!settings.folderPath) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: FolderPath missing'])
-						return
-					}
+		if (!authClient) {
+			this.disposeSpreadsheetWatcher()
+			this._coreHandler.setStatus(StatusCode.BAD, ['Internal error: authClient not set'])
+			return
+		}
 
-					// At this point we're authorized and good to go!
+		if (!settings.folderPath) {
+			this.disposeSpreadsheetWatcher()
+			this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: FolderPath missing'])
+			return
+		}
 
-					if (!this.spreadsheetWatcher || this.spreadsheetWatcher.sheetFolderName !== settings.folderPath) {
-						this._coreHandler.setStatus(P.StatusCode.UNKNOWN, ['Initializing..'])
+		// At this point we're authorized and good to go!
 
-						// this._logger.info('GO!')
+		if (this.spreadsheetWatcher && this.spreadsheetWatcher.sheetFolderName === settings.folderPath) {
+			// Nothing new has happened
+			return
+		}
 
-						if (this.spreadsheetWatcher) {
-							this.spreadsheetWatcher.dispose()
-							delete this.spreadsheetWatcher
-						}
-						const watcher = new RunningOrderWatcher(authClient, this._coreHandler, 'v0.2')
-						this.spreadsheetWatcher = watcher
+		this._logInitSpreadsheetConnection()
+		this._coreHandler.setStatus(StatusCode.UNKNOWN, ['Initializing..'])
+		this.disposeSpreadsheetWatcher()
 
-						watcher
-							.on('info', (message: any) => {
-								this._logger.info(message)
-							})
-							.on('error', (error: any) => {
-								this._logger.error(error)
-							})
-							.on('warning', (warning: any) => {
-								this._logger.error(warning)
-							})
-							// TODO - these event types should operate on the correct types and with better parameters
-							.on('rundown_delete', (rundownExternalId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownDelete, [rundownExternalId])
-									.catch(this._logger.error)
-							})
-							.on('rundown_create', (_rundownExternalId, rundown) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
-							})
-							.on('rundown_update', (_rundownExternalId, rundown) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownUpdate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
-							})
-							.on('segment_delete', (rundownExternalId, sectionId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentDelete, [rundownExternalId, sectionId])
-									.catch(this._logger.error)
-							})
-							.on('segment_create', (rundownExternalId, _sectionId, newSection) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)])
-									.catch(this._logger.error)
-							})
-							.on('segment_update', (rundownExternalId, _sectionId, newSection) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)])
-									.catch(this._logger.error)
-							})
-							.on('part_delete', (rundownExternalId, sectionId, storyId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartDelete, [rundownExternalId, sectionId, storyId])
-									.catch(this._logger.error)
-							})
-							.on('part_create', (rundownExternalId, sectionId, _storyId, newStory) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)])
-									.catch(this._logger.error)
-							})
-							.on('part_update', (rundownExternalId, sectionId, _storyId, newStory) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)])
-									.catch(this._logger.error)
-							})
+		const watcher = new RunningOrderWatcher(authClient, this._coreHandler, 'v0.1')
+		this.spreadsheetWatcher = watcher
 
-						if (settings.folderPath) {
-							this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
-							watcher
-								.setDriveFolder(settings.folderPath)
-								.then(() =>
-									this._coreHandler.setStatus(P.StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`])
-								)
-								.catch((e) => {
-									console.log('Error in addSheetsFolderToWatch', e)
-								})
-						}
-					}
-				}
-				return Promise.resolve()
+		watcher
+			.on('info', (message: any) => {
+				logger.info(message)
 			})
-			.then(() => {
-				return
+			.on('error', (error: any) => {
+				logger.error(error)
 			})
+			.on('warning', (warning: any) => {
+				logger.error(warning)
+			})
+			// TODO - these event types should operate on the correct types and with better parameters
+			.on('rundown_delete', (rundownExternalId) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataRundownDelete, [rundownExternalId])
+					.catch(logger.error)
+			})
+			.on('rundown_create', (_rundownExternalId, rundown) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataRundownCreate, [mutateRundown(rundown)])
+					.catch(logger.error)
+			})
+			.on('rundown_update', (_rundownExternalId, rundown) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataRundownUpdate, [mutateRundown(rundown)])
+					.catch(logger.error)
+			})
+			.on('segment_delete', (rundownExternalId, sectionId) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataSegmentDelete, [rundownExternalId, sectionId])
+					.catch(logger.error)
+			})
+			.on('segment_create', (rundownExternalId, _sectionId, newSection) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)])
+					.catch(logger.error)
+			})
+			.on('segment_update', (rundownExternalId, _sectionId, newSection) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)])
+					.catch(logger.error)
+			})
+			.on('part_delete', (rundownExternalId, sectionId, storyId) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataPartDelete, [rundownExternalId, sectionId, storyId])
+					.catch(logger.error)
+			})
+			.on('part_create', (rundownExternalId, sectionId, _storyId, newStory) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)])
+					.catch(logger.error)
+			})
+			.on('part_update', (rundownExternalId, sectionId, _storyId, newStory) => {
+				this._coreHandler.core
+					.callMethod(PeripheralDeviceAPIMethods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)])
+					.catch(logger.error)
+			})
+
+		if (settings.folderPath) {
+			logger.info(`Starting watch of folder "${settings.folderPath}"`)
+			this._coreHandler.setStatus(StatusCode.GOOD, [`Starting watching folder '${settings.folderPath}'`])
+			watcher
+				.setDriveFolder(settings.folderPath)
+				.then(() => {
+					this._coreHandler.setStatus(StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`])
+				})
+				.catch((error) => {
+					let msg = getErrorMsg(error)
+					logger.error('Something went wrong during setting drive folder: ' + msg)
+					logger.error(error)
+
+					if (checkErrorType(error, ['invalid_grant', 'authError'])) {
+						msg += ', try resetting user credentials'
+					}
+					this._coreHandler.setStatus(StatusCode.BAD, [msg])
+				})
+		}
 	}
+
 	/**
 	 * Get an authentication client towards Google drive on behalf of the user,
 	 * or prompt for login.
-	 *
 	 * @param credentials Credentials from credentials.json which you get from Google
+	 * @param authCredentials Auth credentials if they already exists
+	 * @returns OAuth2 client
 	 */
-	private async createAuthClient(credentials: Credentials, accessToken?: any): Promise<Auth.OAuth2Client | null> {
-		if (this._currentOAuth2Client) {
-			if (!this._currentOAuth2ClientAuthorized) {
-				// there is already a authentication in progress..
-				return Promise.resolve(null)
-			} else {
-				return Promise.resolve(this._currentOAuth2Client)
-			}
+	private async createAuthClient(
+		credentials: Credentials,
+		authCredentials?: Auth.Credentials
+	): Promise<Auth.OAuth2Client> {
+		if (authCredentials && this._currentOAuth2Client) {
+			return this._currentOAuth2Client
 		}
 
+		// Create OAuth2 Client
 		this._currentOAuth2Client = new google.auth.OAuth2(
 			credentials.installed.client_id,
 			credentials.installed.client_secret,
 			credentials.installed.redirect_uris[0]
 		)
 
-		if (accessToken) {
-			this._currentOAuth2Client.setCredentials(accessToken)
-			this._currentOAuth2ClientAuthorized = true
-			return Promise.resolve(this._currentOAuth2Client)
+		if (authCredentials) {
+			this._currentOAuth2Client.setCredentials(authCredentials)
 		} else {
-			// If we don't have an accessToken, request it from the user.
-			this._logger.info('Requesting auth token from user..')
+			// If we don't have an authCredentials, request it from the user.
+			logger.info('Requesting auth token from user')
+
+			if (!this._coreUrl) {
+				logger.error(`Core URL not set`)
+				this._coreHandler.setStatus(StatusCode.BAD, ['Core URL Not set on studio'])
+				return Promise.reject()
+			}
 
 			const authUrl = this._currentOAuth2Client.generateAuthUrl({
 				access_type: 'offline',
 				scope: ACCESS_SCOPES,
 				prompt: 'consent',
+				redirect_uri: new URL(`devices/${this._deviceId}/oauthResponse`, this._coreUrl.toString()).toString(),
 			})
 
-			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.
-			// user will eventually call this.receiveAuthToken()
-			return this._coreHandler.core.callMethod(P.methods.requestUserAuthToken, [authUrl]).then(async () => {
-				return Promise.resolve(null)
-			})
+			/**
+			 * This will prompt the user in Sofie UI to authorize it's Google Account.
+			 * Once authorized, this.receiveAuthToken() method will be invoked.
+			 * Requesting user access token and receiving it is delegated to the Sofie Core, which forwards the data to this gateway app.
+			 */
+			await this._coreHandler.core.callMethod(PeripheralDeviceAPIMethods.requestUserAuthToken, [authUrl])
 		}
+
+		return this._currentOAuth2Client
+	}
+
+	/**
+	 * Method handles receivement of user's auth token from Sofie
+	 * TODO: Rename receiveAuthToken to receiveAuthorizationCode
+	 * @param authorizationCode Authorization code received from Sofie
+	 */
+	async receiveAuthToken(authorizationCode: string): Promise<void> {
+		if (this._currentOAuth2Client) {
+			const oAuth2Client = this._currentOAuth2Client
+
+			// Here redirect_uri just needs to match what was sent previously to satisfy Google's security requirements
+			const redirect_uri = new URL(
+				`devices/${this._deviceId}/oauthResponse`,
+				this._coreUrl?.toString() ?? ''
+			).toString()
+
+			this._currentOAuth2Client.getToken({ code: authorizationCode, redirect_uri }, (error, authCredentials) => {
+				if (error) {
+					throw error
+				} else if (!authCredentials) {
+					throw new Error('No authCredentials received')
+				} else {
+					oAuth2Client.setCredentials(authCredentials)
+
+					// Store for later use:
+					this._coreHandler.core
+						.callMethod(PeripheralDeviceAPIMethods.storeAccessToken, [authCredentials])
+						.catch(logger.error)
+				}
+			})
+		} else {
+			throw Error('No Authorization is currently in progress!')
+		}
+	}
+
+	debugLog(msg: string, ...args: any[]): void {
+		if (this.debugLogging) {
+			logger.debug(msg, ...args)
+		}
+	}
+
+	/**
+	 * TODO - Useless?
+	 */
+	private _logInitSpreadsheetConnection(): void {
+		if (this._disposed) return
+		if (!this._settings) throw Error('Spreadsheet Settings are not set')
+
+		logger.info('Initializing Spreadsheet connection...')
+	}
+
+	triggerReloadRundown(spreadsheetId: string): void {
+		void this.spreadsheetWatcher?.fetchSheetRundown(spreadsheetId, true)
+	}
+
+	public setCoreUrl(url: URL): void {
+		this._coreUrl = url
+	}
+
+	public setDeviceId(id: string): void {
+		this._deviceId = id
 	}
 }
