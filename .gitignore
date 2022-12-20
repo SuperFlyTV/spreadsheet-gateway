@@ -4,3 +4,4 @@ downloads
 credentials.json
 token.json
 .env
+coverage/

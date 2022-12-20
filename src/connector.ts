@@ -1,7 +1,7 @@
 import { SpreadsheetHandler, SpreadsheetConfig } from './spreadsheetHandler'
 import { CoreHandler, CoreConfig } from './coreHandler'
-import * as winston from 'winston'
 import { Process } from './process'
+import { logger } from './logger'
 
 export interface Config {
 	process: ProcessConfig
@@ -23,47 +23,42 @@ export class Connector {
 	private spreadsheetHandler: SpreadsheetHandler
 	private coreHandler: CoreHandler
 	private _config: Config
-	private _logger: winston.Logger
 	private _process: Process
 
-	constructor(logger: winston.Logger, config: Config) {
-		this._logger = logger
+	constructor(config: Config) {
 		this._config = config
-		this._process = new Process(this._logger)
-		this.coreHandler = new CoreHandler(this._logger, this._config.device)
-		this.spreadsheetHandler = new SpreadsheetHandler(this._logger, this._config, this.coreHandler)
+		this._process = new Process()
+		this.coreHandler = new CoreHandler(this._config.device)
+		this.spreadsheetHandler = new SpreadsheetHandler(this._config, this.coreHandler)
 	}
 
 	async init(): Promise<void> {
 		return Promise.resolve()
 			.then(() => {
-				this._logger.info('Initializing Process...')
+				logger.info('Initializing Process...')
 				return this.initProcess()
 			})
 			.then(async () => {
-				this._logger.info('Process initialized')
-				this._logger.info('Initializing Core...')
+				logger.info('Process initialized')
+				logger.info('Initializing Core...')
 				return this.initCore()
 			})
 			.then(async () => {
-				this._logger.info('Initializing Spreadsheet-monitor...')
+				logger.info('Initializing Spreadsheet-monitor...')
 				return this.initSpreadsheetHandler()
 			})
 			.then(() => {
-				this._logger.info('Initialization done')
+				logger.info('Initialization done')
 				return
 			})
 			.catch((e) => {
-				this._logger.error('Error during initialization:', e, e.stack)
-				// this._logger.error(e)
-				// this._logger.error(e.stack)
-
-				this._logger.info('Shutting down in 10 seconds!')
+				logger.error('Error during initialization:', e, e.stack)
+				logger.info('Shutting down in 10 seconds!')
 
 				try {
-					this.dispose().catch((e) => this._logger.error(e))
+					this.dispose().catch((e) => logger.error(e))
 				} catch (e) {
-					this._logger.error(e)
+					logger.error(e)
 				}
 
 				setTimeout(() => {

@@ -1,17 +1,20 @@
-import { EventEmitter } from 'events'
-import * as request from 'request-promise'
-import * as dotenv from 'dotenv'
-import { SheetRundown } from './Rundown'
-import { Auth, Common } from 'googleapis'
-import { google, drive_v3 } from 'googleapis'
-import { SheetsManager, SheetUpdate } from './SheetManager'
-import * as _ from 'underscore'
-import { SheetSegment } from './Segment'
-import { SheetPart } from './Part'
-import * as clone from 'clone'
-import { CoreHandler, WorkflowType } from '../coreHandler'
-import { MediaDict } from './media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
+import { StatusCode } from '@sofie-automation/shared-lib/dist/lib/status'
+import * as clone from 'clone'
+import * as dotenv from 'dotenv'
+import { EventEmitter } from 'events'
+import { Auth, Common, drive_v3, google } from 'googleapis'
+import * as request from 'request-promise'
+import * as _ from 'underscore'
+import { CoreHandler, WorkflowType } from '../coreHandler'
+import { logger } from '../logger'
+import { checkErrorType, getErrorMsg } from '../util'
+import { MediaDict } from './media'
+import { SheetPart } from './Part'
+import { SheetRundown } from './Rundown'
+import { SheetSegment } from './Segment'
+import { SheetsManager, SheetUpdate } from './SheetManager'
+
 dotenv.config()
 
 export class RunningOrderWatcher extends EventEmitter {
@@ -43,7 +46,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		) => this)
 
 	// Fast = list diffs, Slow = fetch All
-	public pollIntervalFast: number = 2 * 1000
+	public pollIntervalFast: number = 5 * 1000
 	public pollIntervalSlow: number = 10 * 1000
 	public pollIntervalMedia: number = 5 * 1000
 
@@ -60,10 +63,12 @@ export class RunningOrderWatcher extends EventEmitter {
 	private _lastMedia: MediaDict = {}
 	private _lastOutputLayers: IOutputLayer[] = []
 	private _lastWorkflow: WorkflowType | undefined
+
 	// private _lastOutputLayers: Array<ISourceLayer> = []
+
 	/**
-	 * A Running Order watcher which will poll Google Drive for changes and emit events
-	 * whenever a change occurs.
+	 * A Running Order watcher which will poll Google Drive for changes
+	 * and emit events whenever a change occurs.
 	 *
 	 * @param authClient Google OAuth2Clint containing connection information
 	 * @param coreHandler Handler for Sofie Core
@@ -91,41 +96,342 @@ export class RunningOrderWatcher extends EventEmitter {
 
 	/**
 	 * Add a Running Order from Google Sheets ID
-	 *
-	 * @param runningOrderId Id of Running Order Sheet on Google Sheets
+	 * @param spreadsheetId Id of Spreadsheet on Google Sheets
+	 * @param asNew If this spreadsheet should be considered as new one
 	 */
-	async checkRunningOrderById(runningOrderId: string, asNew?: boolean): Promise<SheetRundown> {
-		const runningOrder = await this.sheetManager.downloadRunningOrder(
-			runningOrderId,
-			this.coreHandler.GetOutputLayers()
-		)
+	async fetchSheetRundown(spreadsheetId: string, asNew?: boolean): Promise<SheetRundown | undefined> {
+		const downloadedRundown = await this.sheetManager.downloadRundown(spreadsheetId, this.coreHandler.GetOutputLayers())
 
-		if (runningOrder.gatewayVersion === this.gatewayVersion) {
-			this.processUpdatedRunningOrder(runningOrder.externalId, runningOrder, asNew)
+		if (downloadedRundown) {
+			this.processUpdatedRunningOrder(downloadedRundown.externalId, downloadedRundown, asNew)
 		}
 
-		return runningOrder
+		return downloadedRundown
 	}
 
-	async checkDriveFolder(): Promise<SheetRundown[]> {
-		if (!this.sheetFolderName) return []
-
-		const runningOrderIds = await this.sheetManager.getSheetsInDriveFolder(this.sheetFolderName)
-		return Promise.all(
-			runningOrderIds.map(async (roId) => {
-				return this.checkRunningOrderById(roId)
-			})
-		)
-	}
 	/**
 	 * Will add all currently available Running Orders from the first drive folder
 	 * matching the provided name
-	 *
 	 * @param sheetFolderName Name of folder to add Running Orders from. Eg. "My Running Orders"
 	 */
 	async setDriveFolder(sheetFolderName: string): Promise<SheetRundown[]> {
 		this.sheetFolderName = sheetFolderName
-		return this.checkDriveFolder()
+		return this.fetchAllSpreadsheetsInFolder()
+	}
+
+	/**
+	 * Method updates watcher's poll intervals based on the number of spreadsheet documents.
+	 * Updating is important to make sure that optimum number of API calls will be made and API limitation won't be hit.
+	 * @param numberOfSpreadsheets Number of spreadsheet documents in the folder
+	 */
+	updatePollIntervals(numberOfSpreadsheets: number): void {
+		// How long is one period of counting API calls
+		const GOOGLE_TIMEOUT_SECONDS = 60
+
+		// Maximum number of API calls that can be safely made in one period
+		const GOOGLE_MAX_QUERIES = 60
+
+		// Assumption of many documents will be edited (or created) in one period
+		const MAX_EDIT_SHEETS_ASSUMPTION = 30
+
+		let slowInterval =
+			(1000 * GOOGLE_TIMEOUT_SECONDS) / ((GOOGLE_MAX_QUERIES - MAX_EDIT_SHEETS_ASSUMPTION) / numberOfSpreadsheets)
+
+		if (slowInterval < 10000) {
+			slowInterval = 10000
+		}
+
+		if (slowInterval === this.pollIntervalSlow) {
+			// Nothing has changed
+			return
+		}
+
+		logger.info('Updating slow interval to ' + slowInterval)
+		this.pollIntervalSlow = slowInterval
+
+		this.stopWatcher()
+		this.startWatcher()
+	}
+
+	/**
+	 * Returns all sheets in selected folder on the drive
+	 */
+	async fetchAllSpreadsheetsInFolder(): Promise<SheetRundown[]> {
+		if (!this.sheetFolderName) return []
+
+		const spreadsheetIds = await this.sheetManager.getSpreadsheetsInDriveFolder(this.sheetFolderName)
+
+		const sheets: SheetRundown[] = []
+
+		this.updatePollIntervals(spreadsheetIds.length)
+
+		for (const spreadsheetId of spreadsheetIds) {
+			const sheet = await this.fetchSheetRundown(spreadsheetId)
+			if (sheet) {
+				sheets.push(sheet)
+			}
+		}
+
+		return sheets
+	}
+
+	/**
+	 * Start the watcher
+	 */
+	startWatcher(): void {
+		logger.info('Starting Watcher')
+		this.stopWatcher()
+
+		/**
+		 * FAST check - only perform fetching if changes are detected
+		 */
+		this.fastInterval = setInterval(() => {
+			if (this.currentlyChecking) {
+				return
+			}
+			logger.info('Running fast check')
+			this.currentlyChecking = true
+			this.checkForChanges()
+				.catch((error) => {
+					let msg = getErrorMsg(error)
+					logger.error('Something went wrong during fast check: ' + msg)
+					logger.debug(error)
+					if (checkErrorType(error, ['invalid_grant', 'authError'])) {
+						msg += ', try resetting user credentials'
+					}
+					this.coreHandler.setStatus(StatusCode.BAD, [msg])
+				})
+				.then(() => {
+					this.currentlyChecking = false
+				})
+				.catch((error) => {
+					logger.error('Error after checking for changes in fast check')
+					logger.debug(error)
+				})
+		}, this.pollIntervalFast)
+
+		/**
+		 * SLOW check - fetch all spreadsheets in the folder
+		 */
+		this.slowinterval = setInterval(() => {
+			if (this.currentlyChecking) {
+				return
+			}
+
+			logger.info('Running slow check')
+			this.currentlyChecking = true
+
+			this.fetchAllSpreadsheetsInFolder()
+				.then(() => {
+					this.currentlyChecking = false
+				})
+				.catch((error) => {
+					let msg = getErrorMsg(error)
+					logger.error('Something went wrong during slow check: ' + msg)
+					logger.debug(error)
+					if (checkErrorType(error, ['invalid_grant', 'authError'])) {
+						msg += ', try resetting user credentials'
+					}
+					this.coreHandler.setStatus(StatusCode.BAD, [msg])
+				})
+		}, this.pollIntervalSlow)
+
+		// this.mediaPollInterval = setInterval(() => {
+		// 	if (this.currentlyChecking) {
+		// 		return
+		// 	}
+		// 	this.currentlyChecking = true
+		// 	this.updateAvailableMedia()
+		// 		.catch((error) => {
+		// 			console.log('Something went wrong during siper slow check', error, error.stack)
+		// 		})
+		// 		.then(() => {
+		// 			this.updateAvailableOutputs()
+		// 				.catch((error) => {
+		// 					console.log('Something went wrong during super slow check', error, error.stack)
+		// 				})
+		// 				.then(() => {
+		// 					this.updateAvailableTransitions()
+		// 						.catch((error) => {
+		// 							console.log('Something went wrong during super slow check', error, error.stack)
+		// 						})
+		// 						.then(() => {
+		// 							this.currentlyChecking = false
+		// 						})
+		// 						.catch(console.error)
+		// 				})
+		// 				.catch(console.error)
+		// 		})
+		// 		.catch(console.error)
+		// }, this.pollIntervalMedia)
+	}
+
+	/**
+	 * Stop the watcher
+	 */
+	stopWatcher(): void {
+		if (this.fastInterval) {
+			clearInterval(this.fastInterval)
+			this.fastInterval = undefined
+		}
+		if (this.slowinterval) {
+			clearInterval(this.slowinterval)
+			this.slowinterval = undefined
+		}
+		if (this.mediaPollInterval) {
+			clearInterval(this.mediaPollInterval)
+			this.mediaPollInterval = undefined
+		}
+	}
+
+	dispose(): void {
+		this.stopWatcher()
+	}
+
+	/**
+	 * Method checks there have been any changes made to spreadsheet files.
+	 * Checking is done by calling Drive API Changes method.
+	 * If there are changes to files, they will be processed by processChange() method.
+	 */
+	private async checkForChanges(): Promise<void> {
+		let pageToken: string | null | undefined = await this.getChangesStartPageToken()
+
+		while (pageToken) {
+			const listData: Common.GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
+				restrictToMyDrive: true,
+				pageToken: pageToken,
+				fields: '*',
+			})
+
+			if (listData.data.changes) {
+				for (const change of listData.data.changes) {
+					await this.processChange(change)
+				}
+			}
+			pageToken = listData.data.nextPageToken
+
+			if (listData.data.newStartPageToken) {
+				// This was the end. No more changes
+				this.pageToken = listData.data.newStartPageToken
+			}
+		}
+	}
+
+	/**
+	 * Method returns start page token of Google Drive API Changes.
+	 * @returns Start page token
+	 */
+	private async getChangesStartPageToken(): Promise<string> {
+		if (this.pageToken) {
+			return this.pageToken
+		}
+
+		const result = await this.drive.changes.getStartPageToken({})
+		if (!result.data.startPageToken) {
+			throw new Error('No startPageToken found')
+		}
+		return result.data.startPageToken
+	}
+
+	/**
+	 * Method receives a Google Drive API Change object and fetches spreadsheet
+	 * on which that change has been detected.
+	 * @param change Change that has been detected
+	 */
+	private async processChange(change: drive_v3.Schema$Change) {
+		const fileId = change.fileId
+		if (fileId) {
+			const valid = await this.sheetManager.checkSheetIsValid(fileId)
+			if (valid) {
+				if (change.removed) {
+					// File was removed
+					console.log('Sheet was deleted', fileId)
+					this.processUpdatedRunningOrder(fileId, null)
+				} else {
+					// File was updated
+					console.log('Sheet was updated', fileId)
+					const newRundown = await this.sheetManager.downloadRundown(fileId, this.coreHandler.GetOutputLayers())
+
+					if (newRundown && newRundown.gatewayVersion === this.gatewayVersion) {
+						this.processUpdatedRunningOrder(fileId, newRundown)
+					}
+				}
+			}
+		}
+	}
+
+	private processUpdatedRunningOrder(rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
+		const oldRundown = !asNew && this.runningOrders[rundownId]
+
+		// Check if runningOrders have changed:
+
+		if (!rundown && oldRundown) {
+			this.emit('rundown_delete', rundownId)
+		} else if (rundown && !oldRundown) {
+			this.emit('rundown_create', rundownId, rundown)
+			// this.fillRundownData().catch(console.error)
+		} else if (rundown && oldRundown) {
+			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
+				// console.log(rundown.serialize()) // debug
+
+				this.emit('rundown_update', rundownId, rundown)
+			} else {
+				const newRundown: SheetRundown = rundown
+
+				// Go through the sections for changes:
+				_.uniq(
+					oldRundown.segments
+						.map((segment) => segment.externalId)
+						.concat(newRundown.segments.map((segment) => segment.externalId))
+				).forEach((segmentId: string) => {
+					const oldSection: SheetSegment = oldRundown.segments.find(
+						(segment) => segment.externalId === segmentId
+					) as SheetSegment // TODO: handle better
+					const newSection: SheetSegment = rundown.segments.find(
+						(segment) => segment.externalId === segmentId
+					) as SheetSegment
+
+					if (!newSection && oldSection) {
+						this.emit('segment_delete', rundownId, segmentId)
+					} else if (newSection && !oldSection) {
+						this.emit('segment_create', rundownId, segmentId, newSection)
+					} else if (newSection && oldSection) {
+						if (!_.isEqual(newSection.serialize(), oldSection.serialize())) {
+							// console.log(newSection.serialize(), oldSection.serialize()) // debug
+							this.emit('segment_update', rundownId, segmentId, newSection)
+						} else {
+							// Go through the stories for changes:
+							_.uniq(
+								oldSection.parts.map((part) => part.externalId).concat(newSection.parts.map((part) => part.externalId))
+							).forEach((storyId: string) => {
+								const oldStory: SheetPart = oldSection.parts.find((part) => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
+								const newStory: SheetPart = newSection.parts.find((part) => part.externalId === storyId) as SheetPart
+
+								if (!newStory && oldStory) {
+									this.emit('part_delete', rundownId, segmentId, storyId)
+								} else if (newStory && !oldStory) {
+									this.emit('part_create', rundownId, segmentId, storyId, newStory)
+								} else if (newStory && oldStory) {
+									if (!_.isEqual(newStory.serialize(), oldStory.serialize())) {
+										// console.log(newStory.serialize(), oldStory.serialize()) // debug
+										this.emit('part_update', rundownId, segmentId, storyId, newStory)
+									} else {
+										// At this point, we've determined that there are no changes.
+										// Do nothing
+									}
+								}
+							})
+						}
+					}
+				})
+			}
+		}
+		// Update the stored data:
+		if (rundown) {
+			this.runningOrders[rundownId] = clone(rundown)
+		} else {
+			delete this.runningOrders[rundownId]
+		}
 	}
 
 	async sendMediaViaGAPI(): Promise<void> {
@@ -285,7 +591,7 @@ export class RunningOrderWatcher extends EventEmitter {
 		const updates: SheetUpdate[] = []
 		const cell = 2
 
-		const objs = ['FULL', 'HEAD', 'CAM', 'DVE', 'SECTION', 'TITLES', 'BREAKER', 'PACKAGE']
+		const objs = ['FULL', 'HEAD', 'CAM', 'COMPOSITION', 'SECTION', 'TITLES', 'BREAKER', 'PACKAGE']
 
 		objs.forEach((obj) => {
 			updates.push({
@@ -402,234 +708,5 @@ export class RunningOrderWatcher extends EventEmitter {
 		}
 
 		return Promise.resolve()
-	}
-
-	/**
-	 * Start the watcher
-	 */
-	startWatcher(): void {
-		console.log('Starting Watcher')
-		this.stopWatcher()
-
-		this.fastInterval = setInterval(() => {
-			if (this.currentlyChecking) {
-				return
-			}
-			// console.log('Running fast check')
-			this.currentlyChecking = true
-			this.checkForChanges()
-				.catch((error) => {
-					console.error('Something went wrong during fast check', error, error.stack)
-				})
-				.then(() => {
-					// console.log('fast check done')
-					this.currentlyChecking = false
-				})
-				.catch(console.error)
-		}, this.pollIntervalFast)
-
-		this.slowinterval = setInterval(() => {
-			if (this.currentlyChecking) {
-				return
-			}
-			console.log('Running slow check')
-			this.currentlyChecking = true
-
-			this.checkDriveFolder()
-				.catch((error) => {
-					console.error('Something went wrong during slow check', error, error.stack)
-				})
-				.then(() => {
-					// console.log('slow check done')
-					this.currentlyChecking = false
-				})
-				.catch(console.error)
-		}, this.pollIntervalSlow)
-
-		this.mediaPollInterval = setInterval(() => {
-			if (this.currentlyChecking) {
-				return
-			}
-			this.currentlyChecking = true
-			this.updateAvailableMedia()
-				.catch((error) => {
-					console.log('Something went wrong during siper slow check', error, error.stack)
-				})
-				.then(() => {
-					this.updateAvailableOutputs()
-						.catch((error) => {
-							console.log('Something went wrong during super slow check', error, error.stack)
-						})
-						.then(() => {
-							this.updateAvailableTransitions()
-								.catch((error) => {
-									console.log('Something went wrong during super slow check', error, error.stack)
-								})
-								.then(() => {
-									this.currentlyChecking = false
-								})
-								.catch(console.error)
-						})
-						.catch(console.error)
-				})
-				.catch(console.error)
-		}, this.pollIntervalMedia)
-	}
-
-	/**
-	 * Stop the watcher
-	 */
-	stopWatcher(): void {
-		if (this.fastInterval) {
-			clearInterval(this.fastInterval)
-			this.fastInterval = undefined
-		}
-		if (this.slowinterval) {
-			clearInterval(this.slowinterval)
-			this.slowinterval = undefined
-		}
-		if (this.mediaPollInterval) {
-			clearInterval(this.mediaPollInterval)
-			this.mediaPollInterval = undefined
-		}
-	}
-	dispose(): void {
-		this.stopWatcher()
-	}
-
-	private processUpdatedRunningOrder(rundownId: string, rundown: SheetRundown | null, asNew?: boolean) {
-		const oldRundown = !asNew && this.runningOrders[rundownId]
-
-		// Check if runningOrders have changed:
-
-		if (!rundown && oldRundown) {
-			this.emit('rundown_delete', rundownId)
-		} else if (rundown && !oldRundown) {
-			this.emit('rundown_create', rundownId, rundown)
-			this.fillRundownData().catch(console.error)
-		} else if (rundown && oldRundown) {
-			if (!_.isEqual(rundown.serialize(), oldRundown.serialize())) {
-				console.log(rundown.serialize()) // debug
-
-				this.emit('rundown_update', rundownId, rundown)
-			} else {
-				const newRundown: SheetRundown = rundown
-
-				// Go through the sections for changes:
-				_.uniq(
-					oldRundown.segments
-						.map((segment) => segment.externalId)
-						.concat(newRundown.segments.map((segment) => segment.externalId))
-				).forEach((segmentId: string) => {
-					const oldSection: SheetSegment = oldRundown.segments.find(
-						(segment) => segment.externalId === segmentId
-					) as SheetSegment // TODO: handle better
-					const newSection: SheetSegment = rundown.segments.find(
-						(segment) => segment.externalId === segmentId
-					) as SheetSegment
-
-					if (!newSection && oldSection) {
-						this.emit('segment_delete', rundownId, segmentId)
-					} else if (newSection && !oldSection) {
-						this.emit('segment_create', rundownId, segmentId, newSection)
-					} else if (newSection && oldSection) {
-						if (!_.isEqual(newSection.serialize(), oldSection.serialize())) {
-							console.log(newSection.serialize(), oldSection.serialize()) // debug
-							this.emit('segment_update', rundownId, segmentId, newSection)
-						} else {
-							// Go through the stories for changes:
-							_.uniq(
-								oldSection.parts.map((part) => part.externalId).concat(newSection.parts.map((part) => part.externalId))
-							).forEach((storyId: string) => {
-								const oldStory: SheetPart = oldSection.parts.find((part) => part.externalId === storyId) as SheetPart // TODO handle the possibility of a missing id better
-								const newStory: SheetPart = newSection.parts.find((part) => part.externalId === storyId) as SheetPart
-
-								if (!newStory && oldStory) {
-									this.emit('part_delete', rundownId, segmentId, storyId)
-								} else if (newStory && !oldStory) {
-									this.emit('part_create', rundownId, segmentId, storyId, newStory)
-								} else if (newStory && oldStory) {
-									if (!_.isEqual(newStory.serialize(), oldStory.serialize())) {
-										console.log(newStory.serialize(), oldStory.serialize()) // debug
-										this.emit('part_update', rundownId, segmentId, storyId, newStory)
-									} else {
-										// At this point, we've determined that there are no changes.
-										// Do nothing
-									}
-								}
-							})
-						}
-					}
-				})
-			}
-		}
-		// Update the stored data:
-		if (rundown) {
-			this.runningOrders[rundownId] = clone(rundown)
-		} else {
-			delete this.runningOrders[rundownId]
-		}
-	}
-
-	private async processChange(change: drive_v3.Schema$Change) {
-		const fileId = change.fileId
-		if (fileId) {
-			const valid = await this.sheetManager.checkSheetIsValid(fileId)
-			if (valid) {
-				if (change.removed) {
-					// file was removed
-					console.log('Sheet was deleted', fileId)
-
-					this.processUpdatedRunningOrder(fileId, null)
-				} else {
-					// file was updated
-					console.log('Sheet was updated', fileId)
-					const newRunningOrder = await this.sheetManager.downloadRunningOrder(
-						fileId,
-						this.coreHandler.GetOutputLayers()
-					)
-
-					if (newRunningOrder.gatewayVersion === this.gatewayVersion) {
-						this.processUpdatedRunningOrder(fileId, newRunningOrder)
-					}
-				}
-			}
-		}
-	}
-
-	private async getPageToken(): Promise<string> {
-		if (this.pageToken) {
-			return this.pageToken
-		}
-
-		const result = await this.drive.changes.getStartPageToken({})
-		if (!result.data.startPageToken) {
-			throw new Error('No startPageToken found')
-		}
-		return result.data.startPageToken
-	}
-	private async checkForChanges(): Promise<any> {
-		let pageToken: string | null | undefined = await this.getPageToken()
-
-		while (pageToken) {
-			const listData: Common.GaxiosResponse<drive_v3.Schema$ChangeList> = await this.drive.changes.list({
-				restrictToMyDrive: true,
-				pageToken: pageToken,
-				fields: '*',
-			})
-
-			if (listData.data.changes) {
-				for (const change of listData.data.changes) {
-					await this.processChange(change)
-				}
-			}
-			pageToken = listData.data.nextPageToken
-
-			if (listData.data.newStartPageToken) {
-				// This was the end. No more changes
-				this.pageToken = listData.data.newStartPageToken
-			}
-		}
-		return
 	}
 }

@@ -6,6 +6,8 @@ import { SheetUpdate, SheetsManager } from './SheetManager'
 import * as _ from 'underscore'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 
+const SHEET_NAME = 'Rundown'
+
 interface RundownMetaData {
 	version: string
 	startTime: number
@@ -477,7 +479,7 @@ export class SheetRundown implements Rundown {
 		rundown.addSegments(results.segments)
 
 		if (sheetManager && results.sheetUpdates && results.sheetUpdates.length > 0) {
-			sheetManager.updateSheetWithSheetUpdates(sheetId, 'Rundown', results.sheetUpdates).catch(console.error)
+			sheetManager.updateSheetWithSheetUpdates(sheetId, SHEET_NAME, results.sheetUpdates).catch(console.error)
 		}
 		return rundown
 	}

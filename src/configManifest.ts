@@ -14,8 +14,7 @@ export const SPREADSHEET_DEVICE_CONFIG_MANIFEST: DeviceConfigManifest = {
 		},
 	],
 	deviceOAuthFlow: {
-		credentialsHelp:
-			'Go to the url below and click on the "Enable the Drive API button". Then click on "Download Client configuration", save the credentials.json file and upload it here.',
-		credentialsURL: 'https://developers.google.com/drive/api/v3/quickstart/nodejs',
+		credentialsHelp: 'Upload Google Account credentials. For more instructions, visit spreadsheet-gateway repo README.',
+		credentialsURL: 'https://github.com/SuperFlyTV/spreadsheet-gateway',
 	},
 }

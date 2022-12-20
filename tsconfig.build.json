@@ -1,14 +1,18 @@
 {
 	"extends": "@sofie-automation/code-standard-preset/ts/tsconfig.bin",
 	"include": ["src/**/*.ts"],
-	"exclude": ["node_modules/**", "src/**/*spec.ts", "src/**/__tests__/*", "src/**/__mocks__/*"],
+	"exclude": ["node_modules/**", "src/**/*spec.ts", "src/**/__tests__/*", "src/**/__mocks__/*", "src/__tests__/"],
 	"compilerOptions": {
+		"module": "commonjs",
+		"target": "es6",
+		"moduleResolution": "node",
 		"outDir": "./dist",
 		"baseUrl": "./",
 		"paths": {
 			"*": ["./node_modules/*"],
 			"sofie-spreadsheet-gateway": ["./src/index.ts"]
 		},
-		"types": ["node"]
+		"types": ["node"],
+		"lib": ["es6"]
 	}
 }
