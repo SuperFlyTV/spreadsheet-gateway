@@ -102,8 +102,8 @@
     "typedoc": "^0.22.15",
     "typescript": "^4.6.4"
   },
-  "engines" : {
-    "node" : ">=16.0.0"
+  "engines": {
+    "node": ">=16.0.0"
   },
   "standard-version": {
     "message": "chore(release): %s",
