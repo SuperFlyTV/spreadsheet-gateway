@@ -1,6 +1,6 @@
 import { Connector, Config } from './connector'
 import * as winston from 'winston'
-import _ = require('underscore')
+import * as _ from 'underscore'
 
 // CLI arguments / Environment variables --------------
 let host: string = process.env.CORE_HOST || '127.0.0.1'

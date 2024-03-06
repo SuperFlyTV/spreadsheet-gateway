@@ -68,6 +68,7 @@
   "dependencies": {
     "@sofie-automation/blueprints-integration": "1.50.0",
     "@sofie-automation/server-core-integration": "1.50.0",
+    "@sofie-automation/shared-lib": "^1.50.0",
     "clone": "^2.1.2",
     "dotenv": "^16.4.5",
     "googleapis": "^133.0.0",
@@ -82,7 +83,7 @@
   "devDependencies": {
     "@sofie-automation/code-standard-preset": "^2.5.2",
     "@types/clone": "^2.1.4",
-    "@types/jest": "^29.5.12",
+    "@types/jest": "^28.0.3",
     "@types/node": "^18.19.1",
     "@types/request-promise": "^4.1.51",
     "@types/underscore": "^1.11.15",

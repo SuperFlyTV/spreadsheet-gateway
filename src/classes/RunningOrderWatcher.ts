@@ -49,9 +49,9 @@ export class RunningOrderWatcher extends EventEmitter {
 
 	private runningOrders: { [runningOrderId: string]: SheetRundown } = {}
 
-	private fastInterval: NodeJS.Timer | undefined
-	private slowinterval: NodeJS.Timer | undefined
-	private mediaPollInterval: NodeJS.Timer | undefined
+	private fastInterval: NodeJS.Timeout | undefined
+	private slowinterval: NodeJS.Timeout | undefined
+	private mediaPollInterval: NodeJS.Timeout | undefined
 
 	private drive: drive_v3.Drive
 	private currentlyChecking = false

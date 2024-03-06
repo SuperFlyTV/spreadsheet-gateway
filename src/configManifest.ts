@@ -1,18 +1,16 @@
-import { DeviceConfigManifest, ConfigManifestEntryType } from '@sofie-automation/server-core-integration'
+import { DeviceConfigManifest, JSONBlobStringify, JSONSchema } from '@sofie-automation/server-core-integration'
+import * as ConfigSchema from './$schemas/options.json'
+import * as ConfigSchemaSubDevice from './$schemas/devices.json'
 
 export const SPREADSHEET_DEVICE_CONFIG_MANIFEST: DeviceConfigManifest = {
-	deviceConfig: [
-		{
-			id: 'folderPath',
-			name: 'Drive folder name',
-			type: ConfigManifestEntryType.STRING,
+	deviceConfigSchema: JSONBlobStringify<JSONSchema>(ConfigSchema as any),
+
+	subdeviceManifest: {
+		default: {
+			displayName: 'Spreadsheet',
+			configSchema: JSONBlobStringify<JSONSchema>(ConfigSchemaSubDevice as any),
 		},
-		{
-			id: 'debugLogging',
-			name: 'Activate Debug Logging',
-			type: ConfigManifestEntryType.BOOLEAN,
-		},
-	],
+	},
 	deviceOAuthFlow: {
 		credentialsHelp:
 			'Go to the url below and click on the "Enable the Drive API button". Then click on "Download Client configuration", save the credentials.json file and upload it here.',

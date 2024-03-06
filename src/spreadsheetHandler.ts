@@ -1,11 +1,13 @@
 import * as winston from 'winston'
-import { CollectionObj, PeripheralDeviceAPI as P } from '@sofie-automation/server-core-integration'
+import { StatusCode } from '@sofie-automation/shared-lib/dist/lib/status'
+
 import { google } from 'googleapis'
 import { Auth } from 'googleapis'
 
 import { CoreHandler } from './coreHandler'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
 import { mutateRundown, mutateSegment, mutatePart } from './mutate'
+import { PeripheralDeviceForDevice } from '@sofie-automation/server-core-integration'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface SpreadsheetConfig {
@@ -143,7 +145,9 @@ export class SpreadsheetHandler {
 						this._currentOAuth2ClientAuthorized = true
 
 						// Store for later use:
-						this._coreHandler.core.callMethod(P.methods.storeAccessToken, [accessToken]).catch(this._logger.error)
+						this._coreHandler.core.coreMethods
+							.storeAccessToken(accessToken.access_token || '')
+							.catch(this._logger.error)
 
 						resolve()
 					}
@@ -159,11 +163,11 @@ export class SpreadsheetHandler {
 	private _deviceOptionsChanged() {
 		const peripheralDevice = this.getThisPeripheralDevice()
 		if (peripheralDevice) {
-			const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
+			const settings: SpreadsheetDeviceSettings = peripheralDevice.deviceSettings as SpreadsheetDeviceSettings
 			if (this.debugLogging !== settings.debugLogging) {
 				this._logger.info('Changing debugLogging to ' + settings.debugLogging)
 
-				this.debugLogging = settings.debugLogging
+				this.debugLogging = settings.debugLogging || false
 
 				// this.spreadsheetWatcher.setDebug(settings.debugLogging)
 
@@ -193,9 +197,9 @@ export class SpreadsheetHandler {
 
 		this._logger.info('Initializing Spreadsheet connection...')
 	}
-	private getThisPeripheralDevice(): CollectionObj | undefined {
-		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevices')
-		return peripheralDevices.findOne(this._coreHandler.core.deviceId)
+	private getThisPeripheralDevice(): PeripheralDeviceForDevice | undefined {
+		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevicesForDevice')
+		return peripheralDevices.findOne(this._coreHandler.core.deviceId as never)
 	}
 	private async _updateDevices(): Promise<void> {
 		if (this._disposed) return Promise.resolve()
@@ -204,11 +208,11 @@ export class SpreadsheetHandler {
 				const peripheralDevice = this.getThisPeripheralDevice()
 
 				if (peripheralDevice) {
-					const settings: SpreadsheetDeviceSettings = peripheralDevice.settings || {}
+					const settings: SpreadsheetDeviceSettings = peripheralDevice.deviceSettings as SpreadsheetDeviceSettings
 					const secretSettings: SpreadsheetDeviceSecretSettings = peripheralDevice.secretSettings || {}
 
 					if (!secretSettings.credentials) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: Credentials missing'])
+						this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: Credentials missing'])
 						return
 					}
 
@@ -218,24 +222,24 @@ export class SpreadsheetHandler {
 					const authClient = await this.createAuthClient(credentials, accessToken)
 
 					if (!secretSettings.accessToken) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: AccessToken missing'])
+						this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: AccessToken missing'])
 						return
 					}
 
 					if (!authClient) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Internal error: authClient not set'])
+						this._coreHandler.setStatus(StatusCode.BAD, ['Internal error: authClient not set'])
 						return
 					}
 
 					if (!settings.folderPath) {
-						this._coreHandler.setStatus(P.StatusCode.BAD, ['Not set up: FolderPath missing'])
+						this._coreHandler.setStatus(StatusCode.BAD, ['Not set up: FolderPath missing'])
 						return
 					}
 
 					// At this point we're authorized and good to go!
 
 					if (!this.spreadsheetWatcher || this.spreadsheetWatcher.sheetFolderName !== settings.folderPath) {
-						this._coreHandler.setStatus(P.StatusCode.UNKNOWN, ['Initializing..'])
+						this._coreHandler.setStatus(StatusCode.UNKNOWN, ['Initializing..'])
 
 						// this._logger.info('GO!')
 
@@ -258,48 +262,42 @@ export class SpreadsheetHandler {
 							})
 							// TODO - these event types should operate on the correct types and with better parameters
 							.on('rundown_delete', (rundownExternalId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownDelete, [rundownExternalId])
-									.catch(this._logger.error)
+								this._coreHandler.core.coreMethods.dataRundownDelete(rundownExternalId).catch(this._logger.error)
 							})
 							.on('rundown_create', (_rundownExternalId, rundown) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownCreate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
+								this._coreHandler.core.coreMethods.dataRundownCreate(mutateRundown(rundown)).catch(this._logger.error)
 							})
 							.on('rundown_update', (_rundownExternalId, rundown) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataRundownUpdate, [mutateRundown(rundown)])
-									.catch(this._logger.error)
+								this._coreHandler.core.coreMethods.dataRundownUpdate(mutateRundown(rundown)).catch(this._logger.error)
 							})
 							.on('segment_delete', (rundownExternalId, sectionId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentDelete, [rundownExternalId, sectionId])
+								this._coreHandler.core.coreMethods
+									.dataSegmentDelete(rundownExternalId, sectionId)
 									.catch(this._logger.error)
 							})
 							.on('segment_create', (rundownExternalId, _sectionId, newSection) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentCreate, [rundownExternalId, mutateSegment(newSection)])
+								this._coreHandler.core.coreMethods
+									.dataSegmentCreate(rundownExternalId, mutateSegment(newSection))
 									.catch(this._logger.error)
 							})
 							.on('segment_update', (rundownExternalId, _sectionId, newSection) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataSegmentUpdate, [rundownExternalId, mutateSegment(newSection)])
+								this._coreHandler.core.coreMethods
+									.dataSegmentUpdate(rundownExternalId, mutateSegment(newSection))
 									.catch(this._logger.error)
 							})
 							.on('part_delete', (rundownExternalId, sectionId, storyId) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartDelete, [rundownExternalId, sectionId, storyId])
+								this._coreHandler.core.coreMethods
+									.dataPartDelete(rundownExternalId, sectionId, storyId)
 									.catch(this._logger.error)
 							})
 							.on('part_create', (rundownExternalId, sectionId, _storyId, newStory) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartCreate, [rundownExternalId, sectionId, mutatePart(newStory)])
+								this._coreHandler.core.coreMethods
+									.dataPartCreate(rundownExternalId, sectionId, mutatePart(newStory))
 									.catch(this._logger.error)
 							})
 							.on('part_update', (rundownExternalId, sectionId, _storyId, newStory) => {
-								this._coreHandler.core
-									.callMethod(P.methods.dataPartUpdate, [rundownExternalId, sectionId, mutatePart(newStory)])
+								this._coreHandler.core.coreMethods
+									.dataPartUpdate(rundownExternalId, sectionId, mutatePart(newStory))
 									.catch(this._logger.error)
 							})
 
@@ -307,9 +305,7 @@ export class SpreadsheetHandler {
 							this._logger.info(`Starting watch of folder "${settings.folderPath}"`)
 							watcher
 								.setDriveFolder(settings.folderPath)
-								.then(() =>
-									this._coreHandler.setStatus(P.StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`])
-								)
+								.then(() => this._coreHandler.setStatus(StatusCode.GOOD, [`Watching folder '${settings.folderPath}'`]))
 								.catch((e) => {
 									console.log('Error in addSheetsFolderToWatch', e)
 								})
@@ -360,7 +356,7 @@ export class SpreadsheetHandler {
 
 			// This will prompt the user in Core, which will fillow the link, and provide us with an access token.
 			// user will eventually call this.receiveAuthToken()
-			return this._coreHandler.core.callMethod(P.methods.requestUserAuthToken, [authUrl]).then(async () => {
+			return this._coreHandler.core.coreMethods.requestUserAuthToken(authUrl).then(async () => {
 				return Promise.resolve(null)
 			})
 		}

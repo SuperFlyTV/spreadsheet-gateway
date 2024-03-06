@@ -1,9 +1,17 @@
 import {
 	CoreConnection,
 	CoreOptions,
-	PeripheralDeviceAPI as P,
 	DDPConnectorOptions,
+	PeripheralDeviceForDevice,
+	PeripheralDeviceCommand,
 } from '@sofie-automation/server-core-integration'
+import { StatusCode } from '@sofie-automation/shared-lib/dist/lib/status'
+import {
+	PeripheralDeviceCategory,
+	PeripheralDeviceType,
+} from '@sofie-automation/shared-lib/dist/peripheralDevice/peripheralDeviceAPI'
+import { PeripheralDeviceCommandId, PeripheralDeviceId } from '@sofie-automation/shared-lib/dist/core/model/Ids'
+import { protectString, unprotectString } from '@sofie-automation/shared-lib/dist/lib/protectedString'
 import * as winston from 'winston'
 import * as fs from 'fs'
 import { Process } from './process'
@@ -15,20 +23,6 @@ import { MediaDict } from './classes/media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 import { SpreadsheetHandler } from './spreadsheetHandler'
-// import { STATUS_CODES } from 'http'
-export interface PeripheralDeviceCommand {
-	_id: string
-
-	deviceId: string
-	functionName: string
-	args: Array<any>
-
-	hasReply: boolean
-	reply?: any
-	replyError?: any
-
-	time: number // time
-}
 export interface CoreConfig {
 	host: string
 	port: number
@@ -39,18 +33,26 @@ export type WorkflowType = 'ATEM' | 'VMIX'
  * Represents a connection between mos-integration and Core
  */
 export class CoreHandler {
-	public core: CoreConnection
+	public core!: CoreConnection
 	public doReceiveAuthToken?: (authToken: string) => Promise<any>
+
+	public deviceStatus: StatusCode = StatusCode.GOOD
+	public deviceMessages: Array<string> = []
 
 	private logger: winston.Logger
 	private _observers: Array<any> = []
+	public deviceSettings: { [key: string]: any } = {}
+
+	private _deviceOptions: DeviceConfig
 	private _onConnected?: () => any
+	private _onChanged?: () => any
 	private _subscriptions: Array<any> = []
-	private _isInitialized = false
+	private _statusInitialized = false
+	private _statusDestroyed = false
 	private _executedFunctions: { [id: string]: boolean } = {}
 	private _coreConfig?: CoreConfig
 	private _process?: Process
-	private _studioId: string | undefined
+	// private _studioId: string | undefined
 	private _mediaPaths: MediaDict = {}
 	private _outputLayers: IOutputLayer[] = []
 	private _workflow: WorkflowType
@@ -59,7 +61,7 @@ export class CoreHandler {
 	constructor(logger: winston.Logger, deviceOptions: DeviceConfig) {
 		this.logger = logger
 		this._workflow = 'ATEM'
-		this.core = new CoreConnection(this.getCoreConnectionOptions(deviceOptions, 'Spreadsheet Gateway'))
+		this._deviceOptions = deviceOptions
 	}
 
 	async init(
@@ -74,15 +76,20 @@ export class CoreHandler {
 		this._process = process
 		this._spreadsheetHandler = spreadsheetHandler
 
+		this.core = new CoreConnection(this.getCoreConnectionOptions())
+
 		this.core.onConnected(() => {
 			this.logger.info('Core Connected!')
-			if (this._isInitialized) this.onConnectionRestored()
+			if (this._statusInitialized) this.onConnectionRestored()
 		})
 		this.core.onDisconnected(() => {
 			this.logger.info('Core Disconnected!')
 		})
 		this.core.onError((err) => {
-			this.logger.error('Core Error: ' + (err.message || err.toString() || err))
+			if (err instanceof Error) {
+				this.logger.error('Core Error: ' + (err.message || err.toString() || err))
+			}
+			this.logger.error('Core Error: ' + (err.toString() || err))
 		})
 
 		const ddpConfig: DDPConnectorOptions = {
@@ -94,28 +101,46 @@ export class CoreHandler {
 				ca: this._process.certificates,
 			}
 		}
-		return this.core
-			.init(ddpConfig)
-			.then((_id: string) => {
-				this.core
-					.setStatus({
-						statusCode: P.StatusCode.UNKNOWN,
-						messages: ['Starting up'],
-					})
-					.catch((e) => this.logger.warn('Error when setting status:' + e))
-				// nothing
+		await this.core.init(ddpConfig)
+		this.logger.info('Core id: ' + this.core.deviceId)
+		await this.setupObserversAndSubscriptions()
+		this._statusInitialized = true
+		await this.updateCoreStatus()
+	}
+	async setupObserversAndSubscriptions(): Promise<void> {
+		this.logger.info('Core: Setting up subscriptions..')
+		this.logger.info('DeviceId: ' + this.core.deviceId)
+		await Promise.all([
+			this.core.autoSubscribe('peripheralDevices', {
+				_id: this.core.deviceId,
+			}),
+			this.core.autoSubscribe('studioOfDevice', this.core.deviceId),
+			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
+			// @todo: subscribe to userInput
+		])
+		this.logger.info('Core: Subscriptions are set up!')
+		if (this._observers.length) {
+			this.logger.info('Core: Clearing observers..')
+			this._observers.forEach((obs) => {
+				obs.stop()
 			})
-			.then(async () => {
-				return this.setupSubscriptionsAndObservers()
-			})
-			.then(() => {
-				this._isInitialized = true
-			})
+			this._observers = []
+		}
+		// setup observers
+		const observer = this.core.observe('peripheralDevices')
+		observer.added = (id: string) => {
+			this.onDeviceChanged(protectString(id))
+		}
+		observer.changed = (id1: string) => {
+			this.onDeviceChanged(protectString(id1))
+		}
+		this.setupObserverForPeripheralDeviceCommands(this)
+		return
 	}
 	async dispose(): Promise<void> {
 		return this.core
 			.setStatus({
-				statusCode: P.StatusCode.FATAL,
+				statusCode: StatusCode.FATAL,
 				messages: ['Shutting down'],
 			})
 			.then(async () => {
@@ -125,7 +150,7 @@ export class CoreHandler {
 				// nothing
 			})
 	}
-	setStatus(statusCode: P.StatusCode, messages: string[]): void {
+	setStatus(statusCode: StatusCode, messages: string[]): void {
 		this.core
 			.setStatus({
 				statusCode: statusCode,
@@ -133,39 +158,26 @@ export class CoreHandler {
 			})
 			.catch((e) => this.logger.warn('Error when setting status:' + e))
 	}
-	getCoreConnectionOptions(deviceOptions: DeviceConfig, name: string): CoreOptions {
-		let credentials: {
-			deviceId: string
-			deviceToken: string
-		}
-
-		if (deviceOptions.deviceId && deviceOptions.deviceToken) {
-			credentials = {
-				deviceId: deviceOptions.deviceId,
-				deviceToken: deviceOptions.deviceToken,
-			}
-		} else if (deviceOptions.deviceId) {
-			this.logger.warn('Token not set, only id! This might be unsecure!')
-			credentials = {
-				deviceId: deviceOptions.deviceId + name,
-				deviceToken: 'unsecureToken',
-			}
-		} else {
-			credentials = CoreConnection.getCredentials(name.replace(/ /g, ''))
-		}
+	getCoreConnectionOptions(): CoreOptions {
 		const options: CoreOptions = {
-			...credentials,
+			deviceId: protectString(this._deviceOptions.deviceId + 'spreadsheetgateway'),
+			deviceToken: this._deviceOptions.deviceToken,
 
-			deviceCategory: P.DeviceCategory.INGEST,
-			deviceType: P.DeviceType.SPREADSHEET,
-			deviceSubType: P.SUBTYPE_PROCESS,
+			deviceCategory: PeripheralDeviceCategory.INGEST,
+			deviceType: PeripheralDeviceType.SPREADSHEET,
 
-			deviceName: name,
+			deviceName: 'Spreadsheet Gateway',
 			watchDog: this._coreConfig ? this._coreConfig.watchdog : true,
-
 			configManifest: SPREADSHEET_DEVICE_CONFIG_MANIFEST,
+			documentationUrl: 'pok',
+			versions: this._getVersions(),
 		}
-		options.versions = this._getVersions()
+
+		if (!options.deviceToken) {
+			this.logger.warn('Token not set, only id! This might be unsecure!')
+			options.deviceToken = 'unsecureToken'
+		}
+
 		return options
 	}
 	onConnectionRestored(): void {
@@ -205,8 +217,8 @@ export class CoreHandler {
 				this._subscriptions = this._subscriptions.concat(subs)
 			})
 			.then(() => {
-				this.setupObserverForPeripheralDeviceCommands()
-				this.setupObserverForPeripheralDevices()
+				this.setupObserverForPeripheralDeviceCommands(this)
+				// this.setupObserverForPeripheralDevices()
 
 				return
 			})
@@ -221,7 +233,7 @@ export class CoreHandler {
 			// Media found by the media scanner.
 			this.core.autoSubscribe('mediaObjects', studioId, {}),
 		]).then(() => {
-			this.setupObserverForMediaObjects()
+			// this.setupObserverForMediaObjects()
 
 			return
 		})
@@ -233,64 +245,109 @@ export class CoreHandler {
 	async setupSubscriptionForShowStyleBases(): Promise<void> {
 		return Promise.all([this.core.autoSubscribe('showStyleBases', {}), this.core.autoSubscribe('studios', {})]).then(
 			() => {
-				this.setupObserverForShowStyleBases()
+				//				this.setupObserverForShowStyleBases()
 
 				return
 			}
 		)
 	}
+	async updateCoreStatus(): Promise<any> {
+		let statusCode = StatusCode.GOOD
+		const messages: Array<string> = []
 
-	/**
-	 * Executes a peripheral device command.
-	 */
-	async executeFunction(cmd: PeripheralDeviceCommand): Promise<void> {
-		if (cmd) {
-			if (this._executedFunctions[cmd._id]) return // prevent it from running multiple times
-			this.logger.debug(cmd.functionName, cmd.args)
-			this._executedFunctions[cmd._id] = true
-			let success = false
+		if (this.deviceStatus !== StatusCode.GOOD) {
+			statusCode = this.deviceStatus
+			if (this.deviceMessages) {
+				_.each(this.deviceMessages, (msg) => {
+					messages.push(msg)
+				})
+			}
+		}
+		if (!this._statusInitialized) {
+			statusCode = StatusCode.BAD
+			messages.push('Starting up...')
+		}
+		if (this._statusDestroyed) {
+			statusCode = StatusCode.BAD
+			messages.push('Shut down')
+		}
 
-			try {
-				switch (cmd.functionName) {
-					case 'triggerReloadRundown': {
-						const reloadRundownResult = await Promise.resolve(this.triggerReloadRundown(cmd.args[0]))
-						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, reloadRundownResult])
-						break
-					}
-					case 'pingResponse': {
-						const pingResponseResult = await Promise.resolve(this.pingResponse(cmd.args[0]))
-						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, pingResponseResult])
-						break
-					}
-					case 'retireExecuteFunction': {
-						const retireExecuteFunctionResult = await Promise.resolve(this.retireExecuteFunction(cmd.args[0]))
-						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, retireExecuteFunctionResult])
-						break
-					}
-					case 'killProcess': {
-						const killProcessFunctionResult = await Promise.resolve(this.killProcess(cmd.args[0]))
-						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, killProcessFunctionResult])
-						break
-					}
-					case 'getSnapshot': {
-						const getSnapshotResult = await Promise.resolve(this.getSnapshot())
-						success = true
-						await this.core.callMethod(P.methods.functionReply, [cmd._id, null, getSnapshotResult])
-						break
-					}
-					default:
-						throw Error('Function "' + cmd.functionName + '" not found!')
+		if (this.core) {
+			await this.core.setStatus({
+				statusCode: statusCode,
+				messages: messages,
+			})
+		}
+	}
+	onDeviceChanged(id: PeripheralDeviceId): void {
+		if (id === this.core.deviceId) {
+			const col = this.core.getCollection<PeripheralDeviceForDevice>('peripheralDeviceForDevice')
+			if (!col) throw new Error('collection "peripheralDevices" not found!')
+
+			const device = col.findOne(id)
+			if (device) {
+				if (!_.isEqual(this.deviceSettings, device.deviceSettings)) {
+					this.deviceSettings = device.deviceSettings as { [key: string]: any }
 				}
-			} catch (err) {
-				this.logger.error(`executeFunction error ${success ? 'during execution' : 'on reply'}`, err, (err as any).stack)
-				if (!success) {
-					await this.core
-						.callMethod(P.methods.functionReply, [cmd._id, (err as any).toString(), null])
-						.catch((e) => this.logger.error('executeFunction reply error after execution failure', e, e.stack))
+			} else {
+				this.deviceSettings = {}
+			}
+
+			const logLevel = this.deviceSettings['debugLogging'] ? 'debug' : 'info'
+			if (logLevel !== this.logger.level) {
+				this.logger.level = logLevel
+
+				this.logger.info('Loglevel: ' + this.logger.level)
+			}
+
+			if (this._onChanged) this._onChanged()
+		}
+	}
+
+	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+	executeFunction(cmd: PeripheralDeviceCommand, fcnObject: any): void {
+		if (cmd) {
+			if (this._executedFunctions[unprotectString(cmd._id)]) return // prevent it from running multiple times
+			this.logger.info(cmd.functionName ?? '(undefined)', cmd.args)
+			this._executedFunctions[unprotectString(cmd._id)] = true
+			// console.log('executeFunction', cmd)
+			const cb = (err: any, res?: any) => {
+				// console.log('cb', err, res)
+				if (err) {
+					this.logger.error('executeFunction error', err, err.stack)
+				}
+				//@ts-ignore
+				this.core.coreMethods.functionReply(cmd._id, err, res)
+					.then(() => {
+						// console.log('cb done')
+					})
+					.catch((e: Error) => {
+						this.logger.error(e)
+					})
+			}
+
+			if (cmd.functionName === undefined) {
+				this.logger.error(`No function name provided in command "${cmd._id}", aborting`)
+				cb('No function name provided')
+				return
+			}
+
+			const fcn = fcnObject[cmd.functionName]
+			try {
+				if (!fcn) throw Error('Function "' + cmd.functionName + '" not found!')
+
+				Promise.resolve(fcn.apply(fcnObject, cmd.args))
+					.then((result) => {
+						cb(null, result)
+					})
+					.catch((e) => {
+						cb(e.toString(), null)
+					})
+			} catch (e) {
+				if (e instanceof Error) {
+					cb(e.toString(), null)
+				} else {
+					cb(`Unknown error: ${e}`, null)
 				}
 			}
 		}
@@ -311,50 +368,49 @@ export class CoreHandler {
 	/**
 	 * Listen for commands and execute.
 	 */
-	setupObserverForPeripheralDeviceCommands(): void {
-		const observer = this.core.observe('peripheralDeviceCommands')
-		this.killProcess(false) // just make sure it exists
-		this._observers.push(observer)
-
-		/**
-		 * Called when a command is added/changed. Executes that command.
-		 * @param {string} id Command id to execute.
-		 */
-		const addedChangedCommand = (id: string) => {
-			const cmds = this.core.getCollection('peripheralDeviceCommands')
+	setupObserverForPeripheralDeviceCommands(functionObject: CoreHandler): void {
+		const observer = functionObject.core.observe('peripheralDeviceCommands')
+		functionObject.killProcess(false)
+		functionObject._observers.push(observer)
+		const addedChangedCommand = (id: PeripheralDeviceCommandId) => {
+			const cmds = functionObject.core.getCollection<PeripheralDeviceCommand>('peripheralDeviceCommands')
 			if (!cmds) throw Error('"peripheralDeviceCommands" collection not found!')
-			const cmd = cmds.findOne(id) as PeripheralDeviceCommand
+			const cmd = cmds.findOne(id)
 			if (!cmd) throw Error('PeripheralCommand "' + id + '" not found!')
-			if (cmd.deviceId === this.core.deviceId) {
-				void this.executeFunction(cmd)
+			// console.log('addedChangedCommand', id)
+			if (cmd.deviceId === functionObject.core.deviceId) {
+				this.executeFunction(cmd, functionObject)
+			} else {
+				// console.log('not mine', cmd.deviceId, this.core.deviceId)
 			}
 		}
 		observer.added = (id: string) => {
-			addedChangedCommand(id)
+			addedChangedCommand(protectString(id))
 		}
 		observer.changed = (id: string) => {
-			addedChangedCommand(id)
+			addedChangedCommand(protectString(id))
 		}
 		observer.removed = (id: string) => {
 			this.retireExecuteFunction(id)
 		}
-		const cmds = this.core.getCollection('peripheralDeviceCommands')
+		const cmds = functionObject.core.getCollection('peripheralDeviceCommands')
 		if (!cmds) throw Error('"peripheralDeviceCommands" collection not found!')
-		cmds.find({}).forEach((cmd0) => {
-			const cmd = cmd0 as PeripheralDeviceCommand
-			if (cmd.deviceId === this.core.deviceId) {
-				void this.executeFunction(cmd)
+		;(cmds.find({}) as PeripheralDeviceCommand[]).forEach((cmd: PeripheralDeviceCommand) => {
+			if (cmd.deviceId === functionObject.core.deviceId) {
+				this.executeFunction(cmd, functionObject)
 			}
 		})
 	}
 	/**
 	 * Subscribes to changes to media objects to populate spreadsheet data.
 	 */
+	/*	
 	setupObserverForMediaObjects(): void {
 		// Setup observer.
 		const observer = this.core.observe('mediaObjects')
 		this.killProcess(false)
 		this._observers.push(observer)
+
 
 		const addedChanged = (id: string) => {
 			// Check collection exists.
@@ -365,6 +421,7 @@ export class CoreHandler {
 			const file = media.findOne({ _id: id })
 			constructMediaObject(file)
 		}
+
 
 		// Formats the duration as HH:MM:SS
 		const formatDuration = (duration: number): string => {
@@ -423,6 +480,8 @@ export class CoreHandler {
 			constructMediaObject(file)
 		})
 	}
+*/
+	/*
 	setupObserverForShowStyleBases(): void {
 		const observerStyles = this.core.observe('showStyleBases')
 		this.killProcess(false)
@@ -439,7 +498,7 @@ export class CoreHandler {
 			const studios = this.core.getCollection('studios')
 			if (!studios) throw Error('"studios" collection not found!')
 
-			const studio = studios.findOne({ _id: this._studioId })
+			const studio = undefined // studios.findOne({ _id: this._studioId })
 			if (studio) {
 				this._outputLayers = []
 
@@ -480,22 +539,24 @@ export class CoreHandler {
 
 		addedChanged()
 	}
+*/
 	/**
 	 * Subscribes to changes to the device to get its associated studio ID.
 	 */
-	setupObserverForPeripheralDevices(): void {
+
+	/*	setupObserverForPeripheralDevices(): void {
 		// Setup observer.
-		const observer = this.core.observe('peripheralDevices')
+		const observer = this.core.observe('peripheralDeviceCommands')
 		this.killProcess(false)
 		this._observers.push(observer)
 
-		const addedChanged = (id: string) => {
+		const addedChanged = (id: PeripheralDeviceId) => {
 			// Check that collection exists.
-			const devices = this.core.getCollection('peripheralDevices')
-			if (!devices) throw Error('"peripheralDevices" collection not found!')
+			const devices = this.core.getCollection('peripheralDeviceForDevice')
+			if (!devices) throw Error('"peripheralDeviceForDevice" collection not found!')
 
 			// Find studio ID.
-			const dev = devices.findOne({ _id: id })
+			const dev = devices.findOne(id)
 			if ('studioId' in dev) {
 				if (dev['studioId'] !== this._studioId) {
 					this._studioId = dev['studioId']
@@ -517,14 +578,15 @@ export class CoreHandler {
 		}
 
 		observer.added = (id: string) => {
-			addedChanged(id)
+			addedChanged(protectString(id))
 		}
 		observer.changed = (id: string) => {
-			addedChanged(id)
+			addedChanged(protectString(id))
 		}
 
 		addedChanged(this.core.deviceId)
 	}
+*/
 	killProcess(actually: boolean): boolean {
 		if (actually) {
 			this.logger.info('KillProcess command received, shutting down in 1000ms!')

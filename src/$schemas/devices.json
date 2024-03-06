@@ -1,0 +1,29 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://example.com/product.schema.json",
+	"ui:title": "Spreadsheet Gateway Sub-device",
+	"title": "Spreadsheet Gateway Config",
+	"type": "object",
+	"properties": {
+		"primary": {
+			"type": "object",
+			"ui:title": "Subdevice?",
+			"properties": {
+				"folderPath":
+					{
+					"ui:title": "Drive folder name",
+					"type": "string"
+				},
+				"debugLogging":
+				{
+					"ui:title": "Activate Debug Logging",
+					"type": "boolean"
+				}
+			},
+			"required": [],
+			"additionalProperties": false
+		}
+	},
+	"required": [],
+	"additionalProperties": false
+}
