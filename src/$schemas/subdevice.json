@@ -1,12 +1,13 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$id": "https://example.com/product.schema.json",
+	"ui:title": "Spreadsheet Gateway Sub-device",
 	"title": "Spreadsheet Gateway Config",
 	"type": "object",
 	"properties": {
 		"primary": {
 			"type": "object",
-			"ui:title": "Primary",
+			"ui:title": "Subdevice?",
 			"properties": {
 				"folderPath":
 					{
@@ -19,7 +20,7 @@
 					"type": "boolean"
 				}
 			},
-			"required": [],
+			"required": ["folderPath", "debugLogging"],
 			"additionalProperties": false
 		}
 	},

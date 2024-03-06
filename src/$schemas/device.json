@@ -1,26 +1,20 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$id": "https://example.com/product.schema.json",
-	"ui:title": "Spreadsheet Gateway Sub-device",
 	"title": "Spreadsheet Gateway Config",
 	"type": "object",
 	"properties": {
-		"primary": {
+		"How to disable this?": {
 			"type": "object",
-			"ui:title": "Subdevice?",
+			"ui:title": "",
 			"properties": {
-				"folderPath":
-					{
-					"ui:title": "Drive folder name",
-					"type": "string"
-				},
 				"debugLogging":
 				{
 					"ui:title": "Activate Debug Logging",
 					"type": "boolean"
 				}
 			},
-			"required": [],
+			"required": ["folderPath","debugLogging"],
 			"additionalProperties": false
 		}
 	},

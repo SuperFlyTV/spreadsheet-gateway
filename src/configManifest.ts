@@ -1,6 +1,6 @@
 import { DeviceConfigManifest, JSONBlobStringify, JSONSchema } from '@sofie-automation/server-core-integration'
-import * as ConfigSchema from './$schemas/options.json'
-import * as ConfigSchemaSubDevice from './$schemas/devices.json'
+import * as ConfigSchema from './$schemas/device.json'
+import * as ConfigSchemaSubDevice from './$schemas/subdevice.json'
 
 export const SPREADSHEET_DEVICE_CONFIG_MANIFEST: DeviceConfigManifest = {
 	deviceConfigSchema: JSONBlobStringify<JSONSchema>(ConfigSchema as any),
