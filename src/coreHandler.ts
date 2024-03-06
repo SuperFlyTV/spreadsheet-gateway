@@ -46,7 +46,6 @@ export class CoreHandler {
 	private _deviceOptions: DeviceConfig
 	private _onConnected?: () => any
 	private _onChanged?: () => any
-	private _subscriptions: Array<any> = []
 	private _statusInitialized = false
 	private _statusDestroyed = false
 	private _executedFunctions: { [id: string]: boolean } = {}
@@ -111,10 +110,8 @@ export class CoreHandler {
 		this.logger.info('Core: Setting up subscriptions..')
 		this.logger.info('DeviceId: ' + this.core.deviceId)
 		await Promise.all([
-			this.core.autoSubscribe('peripheralDevices', {
-				_id: this.core.deviceId,
-			}),
-			this.core.autoSubscribe('studioOfDevice', this.core.deviceId),
+			this.core.autoSubscribe('peripheralDevices', [this.core.deviceId]),
+			this.core.autoSubscribe('studios', [this.core.deviceId]),
 			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
 			// @todo: subscribe to userInput
 		])
@@ -181,7 +178,7 @@ export class CoreHandler {
 		return options
 	}
 	onConnectionRestored(): void {
-		this.setupSubscriptionsAndObservers().catch((e) => {
+		this.setupObserversAndSubscriptions().catch((e) => {
 			this.logger.error(e)
 		})
 		if (this._onConnected) this._onConnected()
@@ -191,37 +188,6 @@ export class CoreHandler {
 	}
 	onConnected(fcn: () => any): void {
 		this._onConnected = fcn
-	}
-	/**
-	 * Subscribes to events in the core.
-	 */
-	async setupSubscriptionsAndObservers(): Promise<void> {
-		if (this._observers.length) {
-			this.logger.info('Core: Clearing observers..')
-			this._observers.forEach((obs) => {
-				obs.stop()
-			})
-			this._observers = []
-		}
-		this._subscriptions = []
-
-		this.logger.info('Core: Setting up subscriptions for ' + this.core.deviceId + '..')
-		return Promise.all([
-			this.core.autoSubscribe('peripheralDevices', {
-				_id: this.core.deviceId,
-			}),
-			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
-			this.core.autoSubscribe('peripheralDevices', this.core.deviceId),
-		])
-			.then((subs) => {
-				this._subscriptions = this._subscriptions.concat(subs)
-			})
-			.then(() => {
-				this.setupObserverForPeripheralDeviceCommands(this)
-				// this.setupObserverForPeripheralDevices()
-
-				return
-			})
 	}
 
 	/**
