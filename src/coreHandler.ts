@@ -51,7 +51,7 @@ export class CoreHandler {
 	private _executedFunctions: { [id: string]: boolean } = {}
 	private _coreConfig?: CoreConfig
 	private _process?: Process
-	// private _studioId: string | undefined
+	private _studioId: string | undefined
 	private _mediaPaths: MediaDict = {}
 	private _outputLayers: IOutputLayer[] = []
 	private _workflow: WorkflowType
@@ -207,10 +207,9 @@ export class CoreHandler {
 	 * @param studioId The studio the showstyles belong to.
 	 */
 	async setupSubscriptionForShowStyleBases(): Promise<void> {
-		return Promise.all([this.core.autoSubscribe('showStyleBases', {}), this.core.autoSubscribe('studios', {})]).then(
+		return Promise.all([this.core.autoSubscribe('showStyleBases', {})]).then(
 			() => {
-				//				this.setupObserverForShowStyleBases()
-
+				this.setupObserverForShowStyleBases()
 				return
 			}
 		)
@@ -368,13 +367,12 @@ export class CoreHandler {
 	/**
 	 * Subscribes to changes to media objects to populate spreadsheet data.
 	 */
-	/*	
+
 	setupObserverForMediaObjects(): void {
 		// Setup observer.
 		const observer = this.core.observe('mediaObjects')
 		this.killProcess(false)
 		this._observers.push(observer)
-
 
 		const addedChanged = (id: string) => {
 			// Check collection exists.
@@ -382,10 +380,9 @@ export class CoreHandler {
 			if (!media) throw Error('"mediaObjects" collection not found!')
 
 			// Add file path to list.
-			const file = media.findOne({ _id: id })
+			const file = media.findOne(protectString(id))
 			constructMediaObject(file)
 		}
-
 
 		// Formats the duration as HH:MM:SS
 		const formatDuration = (duration: number): string => {
@@ -444,8 +441,7 @@ export class CoreHandler {
 			constructMediaObject(file)
 		})
 	}
-*/
-	/*
+
 	setupObserverForShowStyleBases(): void {
 		const observerStyles = this.core.observe('showStyleBases')
 		this.killProcess(false)
@@ -462,11 +458,11 @@ export class CoreHandler {
 			const studios = this.core.getCollection('studios')
 			if (!studios) throw Error('"studios" collection not found!')
 
-			const studio = undefined // studios.findOne({ _id: this._studioId })
+			const studio = studios.findOne(protectString(this._studioId || ''))
 			if (studio) {
 				this._outputLayers = []
 
-				showStyles.find({}).forEach((style) => {
+				showStyles.find({}).forEach((style: any) => {
 					if ((studio['supportedShowStyleBase'] as Array<string>).indexOf(style._id) !== 1) {
 						;(style['outputLayers'] as IOutputLayer[]).forEach((layer) => {
 							if (!layer.isPGM) {
@@ -503,25 +499,24 @@ export class CoreHandler {
 
 		addedChanged()
 	}
-*/
 	/**
 	 * Subscribes to changes to the device to get its associated studio ID.
 	 */
 
-	/*	setupObserverForPeripheralDevices(): void {
+	setupObserverForPeripheralDevices(): void {
 		// Setup observer.
 		const observer = this.core.observe('peripheralDeviceCommands')
 		this.killProcess(false)
 		this._observers.push(observer)
 
-		const addedChanged = (id: PeripheralDeviceId) => {
+		const addedChanged = (id: string) => {
 			// Check that collection exists.
 			const devices = this.core.getCollection('peripheralDeviceForDevice')
 			if (!devices) throw Error('"peripheralDeviceForDevice" collection not found!')
 
 			// Find studio ID.
-			const dev = devices.findOne(id)
-			if ('studioId' in dev) {
+			const dev = devices.findOne(protectString(id))
+			if (dev && 'studioId' in dev) {
 				if (dev['studioId'] !== this._studioId) {
 					this._studioId = dev['studioId']
 
@@ -542,15 +537,15 @@ export class CoreHandler {
 		}
 
 		observer.added = (id: string) => {
-			addedChanged(protectString(id))
+			addedChanged(id)
 		}
 		observer.changed = (id: string) => {
-			addedChanged(protectString(id))
+			addedChanged(id)
 		}
 
-		addedChanged(this.core.deviceId)
+		addedChanged(String(this.core.deviceId))
 	}
-*/
+
 	killProcess(actually: boolean): boolean {
 		if (actually) {
 			this.logger.info('KillProcess command received, shutting down in 1000ms!')
