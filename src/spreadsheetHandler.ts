@@ -343,8 +343,12 @@ export class SpreadsheetHandler {
 		this._currentOAuth2Client = new google.auth.OAuth2(
 			credentials.installed.client_id,
 			credentials.installed.client_secret,
+			'http://localhost:3000/api/private/peripheralDevices/spreadsheetgateway/oauthResponse/'
+		)
+		/*
 			credentials.installed.redirect_uris[0]
 		)
+		*/
 
 		if (accessToken) {
 			this._currentOAuth2Client.setCredentials(accessToken)
