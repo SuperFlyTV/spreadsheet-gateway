@@ -4,20 +4,25 @@
 	"title": "Spreadsheet Gateway Config",
 	"type": "object",
 	"properties": {
-		"How to disable this?": {
+		"Settings": {
 			"type": "object",
 			"ui:title": "",
 			"properties": {
-				"debugLogging":
+				"FolderPath":
+				{
+					"ui:title": "Spreadsheet Folder Path",
+					"type": "string"					
+				},
+				"DebugLogging":
 				{
 					"ui:title": "Activate Debug Logging",
 					"type": "boolean"
 				}
 			},
-			"required": ["folderPath","debugLogging"],
+			"required": ["FolderPath","DebugLogging"],
 			"additionalProperties": false
 		}
 	},
-	"required": [],
+	"required": ["Settings"],
 	"additionalProperties": false
 }

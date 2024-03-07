@@ -5,23 +5,8 @@
 	"title": "Spreadsheet Gateway Config",
 	"type": "object",
 	"properties": {
-		"primary": {
-			"type": "object",
-			"ui:title": "Subdevice?",
-			"properties": {
-				"folderPath":
-					{
-					"ui:title": "Drive folder name",
-					"type": "string"
-				},
-				"debugLogging":
-				{
-					"ui:title": "Activate Debug Logging",
-					"type": "boolean"
-				}
-			},
-			"required": ["folderPath", "debugLogging"],
-			"additionalProperties": false
+		"none": {
+			"ui:title": ""
 		}
 	},
 	"required": [],
