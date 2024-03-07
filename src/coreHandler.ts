@@ -207,12 +207,10 @@ export class CoreHandler {
 	 * @param studioId The studio the showstyles belong to.
 	 */
 	async setupSubscriptionForShowStyleBases(): Promise<void> {
-		return Promise.all([this.core.autoSubscribe('showStyleBases', {})]).then(
-			() => {
-				this.setupObserverForShowStyleBases()
-				return
-			}
-		)
+		return Promise.all([this.core.autoSubscribe('showStyleBases', {})]).then(() => {
+			this.setupObserverForShowStyleBases()
+			return
+		})
 	}
 	async updateCoreStatus(): Promise<any> {
 		let statusCode = StatusCode.GOOD
@@ -279,8 +277,8 @@ export class CoreHandler {
 				if (err) {
 					this.logger.error('executeFunction error', err, err.stack)
 				}
-				//@ts-ignore
-				this.core.coreMethods.functionReply(cmd._id, err, res)
+				this.core.coreMethods
+					.functionReply(cmd._id, err, res)
 					.then(() => {
 						// console.log('cb done')
 					})
