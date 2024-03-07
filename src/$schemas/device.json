@@ -4,25 +4,19 @@
 	"title": "Spreadsheet Gateway Config",
 	"type": "object",
 	"properties": {
-		"Settings": {
-			"type": "object",
-			"ui:title": "",
-			"properties": {
-				"FolderPath":
-				{
-					"ui:title": "Spreadsheet Folder Path",
-					"type": "string"					
-				},
-				"DebugLogging":
-				{
-					"ui:title": "Activate Debug Logging",
-					"type": "boolean"
-				}
-			},
-			"required": ["FolderPath","DebugLogging"],
-			"additionalProperties": false
+		"folderPath": {
+			"ui:title": "Spreadsheet Folder Path",
+			"type": "string",
+			"default": "https://docs.google.com/spreadsheets/xxxxxxxx"
+		},
+		"debugLogging": {
+			"ui:title": "Activate Debug Logging",
+			"type": "boolean"
 		}
 	},
-	"required": ["Settings"],
+	"required": [
+		"FolderPath",
+		"DebugLogging"
+	],
 	"additionalProperties": false
 }
