@@ -101,7 +101,6 @@ export class CoreHandler {
 			}
 		}
 		await this.core.init(ddpConfig)
-		this.logger.info('Core id: ' + this.core.deviceId)
 		await this.setupObserversAndSubscriptions()
 		this._statusInitialized = true
 		await this.updateCoreStatus()
@@ -110,10 +109,9 @@ export class CoreHandler {
 		this.logger.info('Core: Setting up subscriptions..')
 		this.logger.info('DeviceId: ' + this.core.deviceId)
 		await Promise.all([
-			this.core.autoSubscribe('peripheralDevices', [this.core.deviceId]),
+			this.core.autoSubscribe('peripheralDeviceForDevice', this.core.deviceId),
 			this.core.autoSubscribe('studios', [this.core.deviceId]),
 			this.core.autoSubscribe('peripheralDeviceCommands', this.core.deviceId),
-			// @todo: subscribe to userInput
 		])
 		this.logger.info('Core: Subscriptions are set up!')
 		if (this._observers.length) {
@@ -124,7 +122,7 @@ export class CoreHandler {
 			this._observers = []
 		}
 		// setup observers
-		const observer = this.core.observe('peripheralDevices')
+		const observer = this.core.observe('peripheralDeviceForDevice')
 		observer.added = (id: string) => {
 			this.onDeviceChanged(protectString(id))
 		}

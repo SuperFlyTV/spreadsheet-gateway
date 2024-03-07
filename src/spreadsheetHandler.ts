@@ -8,6 +8,7 @@ import { CoreHandler } from './coreHandler'
 import { RunningOrderWatcher } from './classes/RunningOrderWatcher'
 import { mutateRundown, mutateSegment, mutatePart } from './mutate'
 import { PeripheralDeviceForDevice } from '@sofie-automation/server-core-integration'
+import { protectString } from '@sofie-automation/shared-lib/dist/lib/protectedString'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface SpreadsheetConfig {
@@ -39,6 +40,7 @@ export interface Credentials {
 		redirect_uris: string[]
 	}
 }
+
 export interface AccessToken {
 	access_token: string
 	refresh_token: string
@@ -47,7 +49,10 @@ export interface AccessToken {
 	expiry_date: number
 }
 
-const ACCESS_SCOPES = ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/spreadsheets']
+const ACCESS_SCOPES = [
+	'https://www.googleapis.com/auth/documents.readonly',
+	'https://www.googleapis.com/auth/spreadsheets',
+]
 
 export class SpreadsheetHandler {
 	public options: SpreadsheetConfig
@@ -198,8 +203,9 @@ export class SpreadsheetHandler {
 		this._logger.info('Initializing Spreadsheet connection...')
 	}
 	private getThisPeripheralDevice(): PeripheralDeviceForDevice | undefined {
-		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDevicesForDevice')
-		return peripheralDevices.findOne(this._coreHandler.core.deviceId as never)
+		const peripheralDevices = this._coreHandler.core.getCollection('peripheralDeviceForDevice')
+		const device = peripheralDevices.findOne(protectString(String(this._coreHandler.core.deviceId)))
+		return device
 	}
 	private async _updateDevices(): Promise<void> {
 		if (this._disposed) return Promise.resolve()
