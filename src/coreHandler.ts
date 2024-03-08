@@ -23,6 +23,10 @@ import { MediaDict } from './classes/media'
 import { IOutputLayer } from '@sofie-automation/blueprints-integration'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 import { SpreadsheetHandler } from './spreadsheetHandler'
+import { MediaObject } from '@sofie-automation/shared-lib/dist/core/model/MediaObjects'
+import { DBShowStyleBase } from './sofie-core-copy/dataModel/ShowStyleBase'
+import { DBStudio } from './sofie-core-copy/dataModel/Studio'
+import { applyAndValidateOverrides } from './sofie-core-copy/objectWithOverrides'
 export interface CoreConfig {
 	host: string
 	port: number
@@ -374,7 +378,7 @@ export class CoreHandler {
 
 		const addedChanged = (id: string) => {
 			// Check collection exists.
-			const media = this.core.getCollection('mediaObjects')
+			const media = this.core.getCollection<MediaObject>('mediaObjects')
 			if (!media) throw Error('"mediaObjects" collection not found!')
 
 			// Add file path to list.
@@ -450,20 +454,22 @@ export class CoreHandler {
 		this._observers.push(observerStudios)
 
 		const addedChanged = () => {
-			const showStyles = this.core.getCollection('showStyleBases')
+			const showStyles = this.core.getCollection<DBShowStyleBase>('showStyleBases')
 			if (!showStyles) throw Error('"showStyleBases" collection not found!')
 
-			const studios = this.core.getCollection('studios')
+			const studios = this.core.getCollection<DBStudio>('studios')
 			if (!studios) throw Error('"studios" collection not found!')
 
-			const studio = studios.findOne(protectString(this._studioId || ''))
+			const studio = this._studioId ? studios.findOne(protectString(this._studioId)) : undefined
 			if (studio) {
 				this._outputLayers = []
 
-				showStyles.find({}).forEach((style: any) => {
-					if ((studio['supportedShowStyleBase'] as Array<string>).indexOf(style._id) !== 1) {
-						;(style['outputLayers'] as IOutputLayer[]).forEach((layer) => {
-							if (!layer.isPGM) {
+				showStyles.find({}).forEach((style) => {
+					if (studio.supportedShowStyleBase.indexOf(style._id) !== 1) {
+						Object.values<IOutputLayer | undefined>(
+							applyAndValidateOverrides(style.outputLayersWithOverrides).obj
+						).forEach((layer) => {
+							if (layer && !layer.isPGM) {
 								this._outputLayers.push(layer)
 							}
 						})

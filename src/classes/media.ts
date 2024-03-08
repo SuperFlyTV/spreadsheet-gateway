@@ -1,4 +1,4 @@
-export interface MediaDict {
+export type MediaDict = {
 	[id: string]: MediaInfo
 }
 
