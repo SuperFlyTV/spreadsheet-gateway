@@ -5,9 +5,9 @@
 	"type": "object",
 	"properties": {
 		"folderPath": {
-			"ui:title": "Spreadsheet Folder Path",
+			"ui:title": "Spreadsheets Folder Path",
 			"type": "string",
-			"default": "https://docs.google.com/spreadsheets/xxxxxxxx"
+			"default": "Sofie/SpreadsheetGateway"
 		},
 		"debugLogging": {
 			"ui:title": "Activate Debug Logging",
