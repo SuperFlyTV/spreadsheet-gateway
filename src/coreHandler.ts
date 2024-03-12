@@ -20,7 +20,10 @@ import * as _ from 'underscore'
 
 import { DeviceConfig } from './connector'
 import { MediaDict } from './classes/media'
-import { IOutputLayer } from '@sofie-automation/blueprints-integration'
+import {
+	// IBlueprintConfig,
+	IOutputLayer,
+} from '@sofie-automation/blueprints-integration'
 import { SPREADSHEET_DEVICE_CONFIG_MANIFEST } from './configManifest'
 import { SpreadsheetHandler } from './spreadsheetHandler'
 import { MediaObject } from '@sofie-automation/shared-lib/dist/core/model/MediaObjects'
@@ -134,6 +137,7 @@ export class CoreHandler {
 			this.onDeviceChanged(protectString(id1))
 		}
 		this.setupObserverForPeripheralDeviceCommands(this)
+		this.setupObserverForPeripheralDevices()
 		return
 	}
 	async dispose(): Promise<void> {
@@ -184,37 +188,9 @@ export class CoreHandler {
 			this.logger.error(e)
 		})
 		if (this._onConnected) this._onConnected()
-		// this._coreMosHandlers.forEach((cmh: CoreMosDeviceHandler) => {
-		// 	cmh.setupSubscriptionsAndObservers()
-		// })
 	}
 	onConnected(fcn: () => any): void {
 		this._onConnected = fcn
-	}
-
-	/**
-	 * Subscribes to the 'mediaObjects' collection.
-	 * @param studioId The studio the media objects belong to.
-	 */
-	async setupSubscriptionForMediaObjects(studioId: string): Promise<void> {
-		return Promise.all([
-			// Media found by the media scanner.
-			this.core.autoSubscribe('mediaObjects', studioId, {}),
-		]).then(() => {
-			// this.setupObserverForMediaObjects()
-
-			return
-		})
-	}
-	/**
-	 * Subscribes to the 'showStyleBases' collection.
-	 * @param studioId The studio the showstyles belong to.
-	 */
-	async setupSubscriptionForShowStyleBases(): Promise<void> {
-		return Promise.all([this.core.autoSubscribe('showStyleBases', {})]).then(() => {
-			this.setupObserverForShowStyleBases()
-			return
-		})
 	}
 	async updateCoreStatus(): Promise<any> {
 		let statusCode = StatusCode.GOOD
@@ -367,9 +343,59 @@ export class CoreHandler {
 		})
 	}
 	/**
-	 * Subscribes to changes to media objects to populate spreadsheet data.
+	 * Subscribes to changes to the device to get its associated studio ID.
 	 */
+	setupObserverForPeripheralDevices(): void {
+		// Setup observer.
+		const observer = this.core.observe('peripheralDeviceCommands')
+		this.killProcess(false)
+		this._observers.push(observer)
 
+		const addedChanged = (id: PeripheralDeviceId) => {
+			// Check that collection exists.
+			const devices = this.core.getCollection<PeripheralDeviceForDevice>('peripheralDeviceForDevice')
+			if (!devices) throw Error('"peripheralDeviceForDevice" collection not found!')
+			// Find studio ID.
+			const dev = devices.findOne(id)
+			if (dev && 'studioId' in dev) {
+				if (dev.studioId !== this._studioId) {
+					this._studioId = String(dev.studioId)
+
+					if (this._studioId) {
+						// Subscribe to mediaObjects collection.
+						this.setupSubscriptionForMediaObjects(this._studioId).catch((er) => {
+							this.logger.error(er)
+						})
+
+						this.setupSubscriptionForShowStyleBases().catch((er) => {
+							this.logger.error(er)
+						})
+					}
+				}
+			} else {
+				throw Error('Could not get a studio for spreadsheet-gateway')
+			}
+		}
+
+		observer.added = (id: string) => {
+			addedChanged(protectString(id))
+		}
+		observer.changed = (id: string) => {
+			addedChanged(protectString(id))
+		}
+
+		addedChanged(this.core.deviceId)
+	}
+	async setupSubscriptionForMediaObjects(studioId: string): Promise<void> {
+		// Media found by the media scanner.
+		await this.core.autoSubscribe('mediaObjects', studioId, {})
+		this.setupObserverForMediaObjects()
+		return
+	}
+	async setupSubscriptionForShowStyleBases(): Promise<void> {
+		await this.core.autoSubscribe('showStyleBases', [])
+		this.setupObserverForShowStyleBases()
+	}
 	setupObserverForMediaObjects(): void {
 		// Setup observer.
 		const observer = this.core.observe('mediaObjects')
@@ -435,7 +461,7 @@ export class CoreHandler {
 		}
 
 		// Check collection exists.
-		const media = this.core.getCollection('mediaObjects')
+		const media = this.core.getCollection<MediaObject>('mediaObjects')
 		if (!media) throw Error('"mediaObjects" collection not found!')
 
 		// Add all media files to dictionary.
@@ -476,26 +502,15 @@ export class CoreHandler {
 					}
 				})
 
-				const settings = studio['config'] as Array<{ _id: string; value: string | boolean }>
-				if (!settings) {
-					this._workflow = 'ATEM' // default
-				} else {
-					settings.forEach((setting) => {
-						if (setting._id.match(/^vmix$/i)) {
-							if (setting.value === true) {
-								this._workflow = 'VMIX'
-							} else {
-								this._workflow = 'ATEM'
-							}
-						}
-					})
+				// This is a hack, as overrides defaults does not include the visionMixerType
+				const blueprintVisionMixerType = studio.blueprintConfigWithOverrides.overrides.find((override) => {
+					return override.path === 'visionMixerType'
+				}) as any
+				if (blueprintVisionMixerType?.value === 'vmix') {
+					this._workflow = 'VMIX'
 				}
 			}
 		}
-
-		observerStyles.added = () => addedChanged()
-		observerStyles.changed = () => addedChanged()
-		observerStyles.removed = () => addedChanged()
 
 		observerStudios.added = () => addedChanged()
 		observerStudios.changed = () => addedChanged()
@@ -503,53 +518,6 @@ export class CoreHandler {
 
 		addedChanged()
 	}
-	/**
-	 * Subscribes to changes to the device to get its associated studio ID.
-	 */
-
-	setupObserverForPeripheralDevices(): void {
-		// Setup observer.
-		const observer = this.core.observe('peripheralDeviceCommands')
-		this.killProcess(false)
-		this._observers.push(observer)
-
-		const addedChanged = (id: string) => {
-			// Check that collection exists.
-			const devices = this.core.getCollection('peripheralDeviceForDevice')
-			if (!devices) throw Error('"peripheralDeviceForDevice" collection not found!')
-
-			// Find studio ID.
-			const dev = devices.findOne(protectString(id))
-			if (dev && 'studioId' in dev) {
-				if (dev['studioId'] !== this._studioId) {
-					this._studioId = dev['studioId']
-
-					if (this._studioId) {
-						// Subscribe to mediaObjects collection.
-						this.setupSubscriptionForMediaObjects(this._studioId).catch((er) => {
-							this.logger.error(er)
-						})
-
-						this.setupSubscriptionForShowStyleBases().catch((er) => {
-							this.logger.error(er)
-						})
-					}
-				}
-			} else {
-				throw Error('Could not get a studio for spreadsheet-gateway')
-			}
-		}
-
-		observer.added = (id: string) => {
-			addedChanged(id)
-		}
-		observer.changed = (id: string) => {
-			addedChanged(id)
-		}
-
-		addedChanged(String(this.core.deviceId))
-	}
-
 	killProcess(actually: boolean): boolean {
 		if (actually) {
 			this.logger.info('KillProcess command received, shutting down in 1000ms!')
