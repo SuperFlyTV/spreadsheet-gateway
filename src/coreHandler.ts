@@ -502,12 +502,12 @@ export class CoreHandler {
 					}
 				})
 
-				// This is a hack, as overrides defaults does not include the visionMixerType
-				const blueprintVisionMixerType = studio.blueprintConfigWithOverrides.overrides.find((override) => {
-					return override.path === 'visionMixerType'
-				}) as any
-				if (blueprintVisionMixerType?.value === 'vmix') {
+				const blueprintVisionMixerType = applyAndValidateOverrides(studio.blueprintConfigWithOverrides).obj
+					.visionMixerType
+				if (blueprintVisionMixerType === 'vmix') {
 					this._workflow = 'VMIX'
+				} else {
+					this._workflow = 'ATEM'
 				}
 			}
 		}
